@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.5.4';
+const APP_VERSION = '1.5.5';
 const MAX_PHOTOS = 12;
 
 /* ------------------------------------------------------------------ */
@@ -178,7 +178,7 @@ const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('Browser storage is full — export and remove synced records', 'err'); } },
 };
-const DEFAULT_SETTINGS = { engine: 'auto', geminiKey: '', model: 'gemini-3.5-flash-lite', orKey: '', orModel: 'google/gemini-2.5-flash-lite', endpoint: '', surveyor: '', maxDim: 1024, stamp: true, uploadPhotos: true };
+const DEFAULT_SETTINGS = { engine: 'auto', geminiKey: '', model: 'gemini-3.5-flash-lite', orKey: '', orModel: 'google/gemini-2.5-flash-lite', endpoint: '', surveyor: '', maxDim: 1024, stamp: true, uploadPhotos: true, sampleTools: false };
 let settings = Object.assign({}, DEFAULT_SETTINGS, LS.get('gs_settings', {}));
 
 const PhotoDB = {
@@ -582,6 +582,23 @@ function extractJson(text) {
   throw new Error('Model did not return JSON');
 }
 
+const GEMINI_FALLBACK = 'gemini-2.5-flash';
+async function geminiCall(model, body) {
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.geminiKey }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok && !j.error) j.error = { message: `HTTP ${r.status}` };
+    return j;
+  } catch (e) { return { error: { message: 'Network error: ' + e.message } }; }
+}
+/** Small text-only round trip to verify the configured provider. */
+async function testConnection() {
+  const e = activeEngine();
+  if (e === 'gemini') { const d = await geminiCall(settings.model, { contents: [{ role: 'user', parts: [{ text: 'Reply with the single word OK.' }] }] }); if (d.error) throw new Error(d.error.message); return `Gemini ${settings.model}: ${d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'reply received'}`; }
+  if (e === 'openrouter') { const r = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.orKey}` }, body: JSON.stringify({ model: settings.orModel, messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 5 }) }); const d = await r.json(); if (d.error) throw new Error(d.error.message); return `OpenRouter ${settings.orModel}: ${d.choices?.[0]?.message?.content?.trim() || 'reply received'}`; }
+  if (!chromeAI) throw new Error('Chrome built-in AI not available'); return 'Chrome built-in AI available';
+}
 async function analyzeGemini(fields, list, prompt, onStatus) {
   if (!settings.geminiKey) throw new Error('No Gemini API key set (Settings)');
   onStatus(`Analyzing ${list.length} photo(s) with ${settings.model}…`);
@@ -589,12 +606,24 @@ async function analyzeGemini(fields, list, prompt, onStatus) {
   const body = { contents: [{ role: 'user', parts }], generationConfig: { responseMimeType: 'application/json', responseSchema: geminiSchema(fields), temperature: 0.1 } };
   // Minimise reasoning latency: Gemini 3.x takes thinkingLevel, 2.5 takes thinkingBudget
   body.generationConfig.thinkingConfig = /^gemini-3/.test(settings.model) ? { thinkingLevel: 'low' } : { thinkingBudget: 0 };
-  const call = async b => (await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.geminiKey }, body: JSON.stringify(b) })).json();
-  let data = await call(body);
-  if (data.error && /thinking/i.test(data.error.message || '')) { delete body.generationConfig.thinkingConfig; data = await call(body); }
-  if (data.error) throw new Error(data.error.message || 'Gemini error');
-  return extractJson(data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '');
+  // Self-healing attempt chain: as configured → no thinking config → no strict schema → fallback model
+  const attempts = [
+    { model: settings.model, body },
+    { model: settings.model, body: { ...body, generationConfig: { ...body.generationConfig, thinkingConfig: undefined } } },
+    { model: settings.model, body: { ...body, generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } } },
+    { model: GEMINI_FALLBACK, body: { ...body, generationConfig: { responseMimeType: 'application/json', responseSchema: geminiSchema(fields), temperature: 0.1 } } },
+  ];
+  let lastErr = 'Gemini error';
+  for (const a of attempts) {
+    if (a.model === GEMINI_FALLBACK && settings.model === GEMINI_FALLBACK) break;
+    const data = await geminiCall(a.model, a.body);
+    if (data.error) { lastErr = `${data.error.message || data.error.status || 'Gemini error'} (${a.model})`; continue; }
+    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+    if (!text) { lastErr = data.candidates?.[0]?.finishReason ? `Empty response (${data.candidates[0].finishReason})` : 'Empty response'; continue; }
+    if (a.model !== settings.model) toast(`Model ${settings.model} failed — used ${a.model} instead`);
+    return extractJson(text);
+  }
+  throw new Error(lastErr);
 }
 async function analyzeOpenRouter(fields, list, prompt, onStatus) {
   if (!settings.orKey) throw new Error('No OpenRouter API key set (Settings)');
@@ -660,7 +689,7 @@ async function analyzePhotos(section = '', list = null) {
     toast(`${n} fields filled in ${secs}s`, 'ok');
     if (section) $(`[data-section="${section}"]`).classList.remove('collapsed'); else $$('.card.collapsed').forEach(c => c.classList.remove('collapsed'));
   } catch (e) {
-    setStatus(st, 'AI error: ' + e.message, 'err');
+    setStatus(st, 'AI error: ' + e.message, 'err'); toast('AI error: ' + e.message, 'err');
   } finally {
     btn.disabled = photos.length === 0; $$('.sec-tools').forEach(l => l.classList.remove('disabled'));
     scheduleDraftSave(); updateProgress();
@@ -816,21 +845,23 @@ function openSettings() {
   const known = KNOWN_MODELS.includes(settings.model);
   $('#setModel').value = known ? settings.model : 'custom'; $('#setModelCustom').hidden = known; $('#setModelCustom').value = known ? '' : settings.model;
   $('#setEndpoint').value = settings.endpoint; $('#setSurveyor').value = settings.surveyor;
-  $('#setMaxDim').value = settings.maxDim; $('#setStamp').checked = settings.stamp; $('#setUploadPhotos').checked = settings.uploadPhotos;
+  $('#setMaxDim').value = settings.maxDim; $('#setStamp').checked = settings.stamp; $('#setUploadPhotos').checked = settings.uploadPhotos; $('#setSampleTools').checked = settings.sampleTools;
   $('#settingsDlg').showModal();
 }
-function saveSettings() {
+function saveSettings(quiet = false) {
   const modelSel = $('#setModel').value;
   settings = {
     engine: $('#setEngine').value, geminiKey: $('#setKey').value.trim(),
     model: modelSel === 'custom' ? ($('#setModelCustom').value.trim() || DEFAULT_SETTINGS.model) : modelSel,
     orKey: $('#setOrKey').value.trim(), orModel: $('#setOrModel').value.trim() || DEFAULT_SETTINGS.orModel,
     endpoint: $('#setEndpoint').value.trim(), surveyor: $('#setSurveyor').value.trim(),
-    maxDim: +$('#setMaxDim').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked,
+    maxDim: +$('#setMaxDim').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
   };
+  if (quiet) return; // dry run for the connection test
   LS.set('gs_settings', settings);
   if (!getValue('surveyor') && settings.surveyor) setValue('surveyor', settings.surveyor);
   updateEngineChip(); toast('Settings saved', 'ok');
+  if (window.Analysis) Analysis.schedule();
 }
 
 /* ------------------------------------------------------------------ */
@@ -854,6 +885,11 @@ function init() {
   $$('.tab').forEach(t => t.onclick = () => showView(t.dataset.view));
   $('#settingsBtn').onclick = openSettings;
   $('#setModel').onchange = e => { $('#setModelCustom').hidden = e.target.value !== 'custom'; };
+  $('#testAiBtn').onclick = async e => {
+    e.preventDefault(); const st = $('#testAiStatus'); const saved = settings;
+    saveSettings(true); setStatus(st, 'Testing…', '', true);
+    try { setStatus(st, await testConnection(), 'ok'); } catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); } finally { settings = saved; }
+  };
   $('#settingsDlg').addEventListener('close', () => { if ($('#settingsDlg').returnValue === 'save') saveSettings(); });
   $('#photoDlgClose').onclick = () => $('#photoDlg').close();
   $('#locateBtn').onclick = () => detectLocation(false);

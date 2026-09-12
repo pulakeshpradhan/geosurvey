@@ -98,11 +98,12 @@ const Analysis = (() => {
     const src = $('#anSource').value; const cloud = typeof adminRows !== 'undefined' && adminRows.length ? adminRows : null;
     let rows = src === 'cloud' ? (cloud || []) : src === 'device' ? getRecords() : (cloud || getRecords());
     const srcLabel = src === 'cloud' || (src === 'auto' && cloud) ? 'cloud (Google Sheet)' : 'this device';
-    const sample = $('#anIncludeSample').checked ? LS.get('gs_sample', []) : [];
+    const sample = settings.sampleTools && $('#anIncludeSample').checked ? LS.get('gs_sample', []) : [];
     return { rows: [...rows, ...sample], srcLabel, nReal: rows.length, nSample: sample.length };
   }
   function schedule() { clearTimeout(timer); timer = setTimeout(run, 600); }
   function run() {
+    $('#anSampleTools').hidden = !settings.sampleTools;
     if (running) { queued = true; return; }
     const ds = dataset();
     setStatus($('#anStatus'), `Analyzing ${ds.rows.length} records (${ds.nReal} from ${ds.srcLabel}${ds.nSample ? ` + ${ds.nSample} sample` : ''})…`, '', true);
@@ -215,6 +216,7 @@ const Analysis = (() => {
     $('#anSource').onchange = run; $('#anIncludeSample').onchange = run;
     $('#anSampleBtn').onclick = () => { const n = parseInt(prompt('How many synthetic households to generate?', '150'), 10); if (!n) return; LS.set('gs_sample', sampleRecords(Math.min(2000, n))); $('#anIncludeSample').checked = true; toast(`${n} sample records generated (kept separate from real data)`, 'ok'); run(); };
     $('#anSampleClearBtn').onclick = () => { LS.set('gs_sample', []); toast('Sample data removed'); run(); };
+    $('#anSampleTools').hidden = !settings.sampleTools;
   }
   document.addEventListener('DOMContentLoaded', init);
   return { schedule, run, open, sampleRecords };

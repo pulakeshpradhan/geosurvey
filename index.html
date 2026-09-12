@@ -104,9 +104,11 @@
               <option value="device">Source: device records</option>
               <option value="cloud">Source: cloud (admin)</option>
             </select>
-            <label class="check-inline"><input type="checkbox" id="anIncludeSample" checked> include sample data</label>
-            <button id="anSampleBtn" class="btn btn-outline btn-sm">Generate sample data</button>
-            <button id="anSampleClearBtn" class="btn btn-ghost btn-sm">Remove sample</button>
+            <span id="anSampleTools" class="btn-row" hidden>
+              <label class="check-inline"><input type="checkbox" id="anIncludeSample" checked> include sample data</label>
+              <button id="anSampleBtn" class="btn btn-outline btn-sm">Generate sample data</button>
+              <button id="anSampleClearBtn" class="btn btn-ghost btn-sm">Remove sample</button>
+            </span>
             <button id="anRunBtn" class="btn btn-primary btn-sm">Re-run</button>
             <button id="anReportBtn" class="btn btn-outline btn-sm">Download report</button>
           </div>
@@ -206,6 +208,7 @@
             <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
           </datalist>
         </label>
+        <div class="btn-row"><button type="button" id="testAiBtn" class="btn btn-outline btn-sm">Test connection</button><span id="testAiStatus" class="status" style="margin:0"></span></div>
         <label>Image size sent to AI
           <select id="setMaxDim" class="input">
             <option value="768">768 px — fastest</option>
@@ -226,6 +229,7 @@
         </label>
         <label class="check"><input type="checkbox" id="setStamp" checked> Stamp photos with date, time, coordinates and address</label>
         <label class="check"><input type="checkbox" id="setUploadPhotos" checked> Upload stamped photos to Google Drive with each submission</label>
+        <label class="check"><input type="checkbox" id="setSampleTools"> Show sample-data tools in the Analysis tab (synthetic households for testing; kept separate from real records)</label>
       </fieldset>
 
       <div class="btn-row end">
