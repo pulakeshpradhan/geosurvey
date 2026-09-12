@@ -28,7 +28,9 @@ p { margin: 0; }
 .icon-btn { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 6px; display: inline-flex; font: inherit; }
 .icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
 .icon-btn[hidden] { display: none; }
-#pdfBtn { color: var(--rust); }
+#pdfBtn[hidden] { display: none; }
+.field textarea[readonly] { background: var(--card-soft); color: var(--muted-2); }
+.lock-note { font-size: 12.5px; color: var(--muted-2); margin-bottom: 10px; }
 .notice-bar { background: var(--rust-soft); color: var(--rust); border-left: 4px solid var(--rust); padding: 8px 20px; font-size: 13px; text-align: center; }
 
 main { max-width: 920px; margin: 0 auto; padding: 20px 16px; }
@@ -201,15 +203,16 @@ dialog::backdrop { background: rgba(11,14,19,.5); }
 @keyframes fade { from { opacity: 0; transform: translateY(-6px); } }
 
 @media (max-width: 640px) {
-  .topbar { padding: 0 10px; gap: 6px; }
-  .brand-name { display: none; }
-  .tabs { flex: 1; justify-content: center; }
-  .tab { padding: 8px 8px; font-size: 13px; }
+  .topbar { flex-wrap: wrap; height: auto; padding: 8px 10px 6px; gap: 6px 8px; }
+  .brand { flex: 1; }
+  #pdfBtn { padding: 6px 9px; font-size: 12.5px; }
+  .tabs { order: 10; flex-basis: 100%; justify-content: space-between; background: var(--card-soft); border-radius: 10px; padding: 3px; }
+  .tab { flex: 1; text-align: center; padding: 7px 4px; font-size: 13px; }
+  .toasts { top: 104px; }
   .section-head { flex-wrap: wrap; }
   .section-toggle { flex-basis: 100%; }
   .sec-tools { width: 100%; }
   .sec-tools .sec-thumbs { margin-left: auto; }
-  .toasts { top: 60px; }
   main { padding: 12px; }
   .card { padding: 16px; }
   .photo-actions .btn-primary { flex-basis: 100%; margin-left: 0; }

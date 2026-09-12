@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const MAX_PHOTOS = 12;
 
 /* ------------------------------------------------------------------ */
@@ -15,18 +15,18 @@ const MAX_PHOTOS = 12;
 /* ------------------------------------------------------------------ */
 const LOCATION_FIELDS = [
   { k: 'surveyor', label: 'Enumerator name', type: 'text', required: true },
-  { k: 'survey_date', label: 'Survey date', type: 'date' },
+  { k: 'survey_date', label: 'Survey date', type: 'date', ro: true },
   { k: 'latitude', label: 'Latitude', type: 'text', ro: true },
   { k: 'longitude', label: 'Longitude', type: 'text', ro: true },
   { k: 'gps_accuracy_m', label: 'GPS accuracy (m)', type: 'text', ro: true },
   { k: 'altitude_m', label: 'Altitude (m)', type: 'text', ro: true },
-  { k: 'village', label: 'Village / Locality', type: 'text', ai: true },
-  { k: 'postcode', label: 'PIN / Postal code', type: 'text', ai: true },
-  { k: 'block', label: 'Block / Tehsil / Sub-district', type: 'text' },
-  { k: 'district', label: 'District', type: 'text', ai: true },
-  { k: 'state', label: 'State / Province', type: 'text' },
-  { k: 'country', label: 'Country', type: 'text' },
-  { k: 'full_address', label: 'Full address (from map)', type: 'textarea', wide: true },
+  { k: 'village', label: 'Village / Locality', type: 'text', ro: true },
+  { k: 'postcode', label: 'PIN / Postal code', type: 'text', ro: true },
+  { k: 'block', label: 'Block / Tehsil / Sub-district', type: 'text', ro: true },
+  { k: 'district', label: 'District', type: 'text', ro: true },
+  { k: 'state', label: 'State / Province', type: 'text', ro: true },
+  { k: 'country', label: 'Country', type: 'text', ro: true },
+  { k: 'full_address', label: 'Full address (from map)', type: 'textarea', wide: true, ro: true },
 ];
 
 const SECTIONS = [
@@ -246,7 +246,7 @@ function fieldHTML(f) {
     case 'likert':
       ctrl = `<div class="likert" data-key="${f.k}" role="radiogroup">${LIKERT.map((l, i) => `<label title="${esc(l)}"><input type="radio" name="${id}" value="${i + 1}"><span>${i + 1}</span></label>`).join('')}</div>`; break;
     case 'textarea':
-      ctrl = `<textarea id="${id}" data-key="${f.k}"></textarea>`; break;
+      ctrl = `<textarea id="${id}" data-key="${f.k}" ${f.ro ? 'readonly' : ''}></textarea>`; break;
     default:
       ctrl = `<input id="${id}" data-key="${f.k}" type="${f.type}" ${f.ro ? 'readonly' : ''} ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''} ${f.type === 'number' ? 'inputmode="numeric"' : ''}>`;
   }
@@ -262,8 +262,7 @@ function renderForm() {
           <span class="step">${String(i + 2).padStart(2, '0')}</span><h2>${esc(s.title)}</h2><span class="section-count" data-count="${s.id}"></span><span class="chev">▼</span>
         </button>
         ${s.photoHint ? `<div class="sec-tools">
-          <label class="tool" title="Capture photo for this section">${CAMERA_SVG}<input type="file" accept="image/*" capture="environment" data-sec="${s.id}" hidden></label>
-          <label class="tool" title="Upload photo(s) for this section">${UPLOAD_SVG}<input type="file" accept="image/*" multiple data-sec="${s.id}" hidden></label>
+          <label class="tool" title="Capture a photo for this section with the camera">${CAMERA_SVG}<input type="file" accept="image/*" capture="environment" data-sec="${s.id}" hidden></label>
           <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
           <div class="sec-thumbs" data-thumbs="${s.id}"></div>
         </div>` : ''}
@@ -535,7 +534,7 @@ function engineLabel(e = activeEngine()) {
 }
 function updateEngineChip() {
   const chip = $('#engineChip');
-  chip.textContent = engineLabel(); chip.className = 'chip ' + (engineReady() ? 'on' : '');
+  if (chip) { chip.textContent = engineLabel(); chip.className = 'chip ' + (engineReady() ? 'on' : ''); }
   const opt = $('#setEngine option[value="chrome"]');
   if (opt) opt.textContent = 'Chrome built-in AI (Gemini Nano, no key)' + (chromeAI ? (chromeAI === 'available' ? ' — ready' : ' — needs one-time download') : ' — not available in this browser');
 }
@@ -859,7 +858,6 @@ function init() {
   $('#photoDlgClose').onclick = () => $('#photoDlg').close();
   $('#locateBtn').onclick = () => detectLocation(false);
   $('#captureInput').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
-  $('#uploadInput').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
   $('#analyzeBtn').onclick = () => analyzePhotos();
   $('#submitBtn').onclick = submitForm;
   $('#resetBtn').onclick = () => { if (confirm('Clear the form?')) clearForm(); };
@@ -884,10 +882,6 @@ function init() {
   $('#adminExportKmzBtn').onclick = () => Exports.kmz(adminRows, 'geosurvey_all');
   $('#adminLogoutBtn').onclick = () => { sessionStorage.removeItem('gs_admin'); $('#adminPanel').hidden = true; $('#adminLogin').hidden = false; $('#adminToken').value = ''; setStatus($('#adminStatus'), ''); };
 
-  document.addEventListener('paste', e => {
-    const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
-    if (files.length && !$('#formView').hidden) addFiles(files);
-  });
   const offline = () => { $('#offlineBar').hidden = navigator.onLine; updateEngineChip(); };
   window.addEventListener('online', () => { offline(); syncPending(); });
   window.addEventListener('offline', offline);
