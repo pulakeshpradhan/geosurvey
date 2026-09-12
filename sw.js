@@ -1,6 +1,6 @@
 /* GeoSurvey service worker — caches the app shell so the form opens offline.
  * Bump CACHE when deploying changes to index.html / app.js / styles.css. */
-const CACHE = 'geosurvey-v1.5.0';
+const CACHE = 'geosurvey-v1.5.1';
 const SHELL = ['./', './index.html', './app.js', './exports.js', './analysis.js', './pdf.js', './stats-worker.js', './styles.css', './icon.svg', './manifest.json'];
 
 self.addEventListener('install', e => {
