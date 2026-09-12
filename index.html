@@ -3,104 +3,165 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f766e">
-  <title>GeoSurvey · AI-assisted Socio-Economic Survey</title>
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="AI-assisted socio-economic household survey: photo auto-fill, one-click geolocation, Google Sheets database.">
+  <title>GeoSurvey</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <img src="icon.svg" alt="" width="28" height="28">
-      <div>
-        <div class="brand-name">GeoSurvey</div>
-        <div class="brand-sub">AI-assisted socio-economic survey</div>
-      </div>
+      <img src="icon.svg" alt="" width="26" height="26">
+      <span class="brand-name">GeoSurvey</span>
     </div>
-    <nav class="tabs" role="tablist">
-      <button class="tab active" data-view="formView" role="tab">Form</button>
-      <button class="tab" data-view="responsesView" role="tab">Responses <span id="pendingBadge" class="badge" hidden>0</span></button>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button class="tab active" data-view="formView" role="tab">Survey</button>
+      <button class="tab" data-view="responsesView" role="tab">Records <span id="pendingBadge" class="badge" hidden>0</span></button>
+      <button class="tab" data-view="analysisView" role="tab">Analysis</button>
+      <button class="tab" data-view="adminView" role="tab">Admin</button>
     </nav>
-    <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">⚙️</button>
+    <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
   </header>
 
-  <div id="offlineBar" class="offline-bar" hidden>You are offline — submissions will be queued and synced later.</div>
+  <div id="offlineBar" class="notice-bar" hidden>Offline — submissions are queued on this device and will sync automatically.</div>
 
   <main>
-    <!-- ================= FORM VIEW ================= -->
+    <!-- ================= SURVEY VIEW ================= -->
     <section id="formView" class="view">
 
-      <!-- AI photo assist -->
-      <div class="card ai-card">
+      <!-- Photos & AI -->
+      <div class="card" id="photoCard">
         <div class="card-head">
-          <h2>✨ Photo → Auto-fill</h2>
-          <span class="hint">Take a photo of the dwelling, assets, a filled paper form or an ID — Gemini fills the questionnaire for you to review.</span>
+          <div>
+            <h2>Photos &amp; auto-fill</h2>
+            <p class="sub">Add photos of the dwelling, interior, assets, documents or a filled paper form and analyze them all at once — or use the “Photo → fill” button inside each section to fill just that section. Every photo is stamped with time, coordinates and address.</p>
+          </div>
+          <span id="engineChip" class="chip" title="Analysis engine">—</span>
         </div>
         <div class="photo-actions">
           <label class="btn btn-outline">
-            📷 Capture
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Capture
             <input type="file" id="captureInput" accept="image/*" capture="environment" hidden>
           </label>
           <label class="btn btn-outline">
-            🖼️ Upload
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            Upload
             <input type="file" id="uploadInput" accept="image/*" multiple hidden>
           </label>
-          <button id="analyzeBtn" class="btn btn-primary" disabled>✨ Analyze &amp; Fill</button>
+          <span class="photo-count" id="photoCount"></span>
+          <button id="analyzeBtn" class="btn btn-primary" disabled>Analyze &amp; fill</button>
         </div>
         <div id="thumbStrip" class="thumb-strip"></div>
-        <input type="text" id="aiContext" class="input" placeholder="Optional context for the AI (e.g. 'photo of the kitchen', 'front of the house')">
+        <input type="text" id="aiContext" class="input" placeholder="Optional hint for the AI, e.g. “front of the house”, “kitchen”, “ration card”">
         <div id="aiStatus" class="status"></div>
       </div>
 
       <!-- Location -->
       <div class="card">
         <div class="card-head">
-          <h2>📍 Location</h2>
+          <div><span class="step">01</span><h2>Location</h2></div>
           <button id="locateBtn" class="btn btn-primary btn-sm">Detect location</button>
         </div>
         <div id="locStatus" class="status"></div>
         <div class="grid" id="locFields"></div>
       </div>
 
-      <!-- Dynamic survey sections -->
       <div id="sections"></div>
 
       <div class="card">
-        <div class="card-head"><h2>📝 Remarks</h2></div>
+        <div class="card-head"><div><span class="step" id="remarksStep"></span><h2>Remarks</h2></div></div>
         <div class="grid" id="remarksFields"></div>
       </div>
     </section>
 
-    <!-- ================= RESPONSES VIEW ================= -->
+    <!-- ================= RECORDS VIEW (device) ================= -->
     <section id="responsesView" class="view" hidden>
       <div class="card">
         <div class="card-head">
-          <h2>Local submissions</h2>
+          <div><h2>Records on this device</h2><p class="sub" id="localSummary"></p></div>
           <div class="btn-row">
-            <button id="syncBtn" class="btn btn-primary btn-sm">⟳ Sync pending</button>
-            <button id="exportCsvBtn" class="btn btn-outline btn-sm">⬇ CSV</button>
-            <button id="exportJsonBtn" class="btn btn-outline btn-sm">⬇ JSON</button>
-            <button id="clearLocalBtn" class="btn btn-danger btn-sm">Clear synced</button>
+            <button id="syncBtn" class="btn btn-primary btn-sm">Sync pending</button>
+            <button id="exportCsvBtn" class="btn btn-outline btn-sm">Export CSV</button>
+            <button id="exportJsonBtn" class="btn btn-outline btn-sm">Export JSON</button>
+            <button id="exportSpssBtn" class="btn btn-outline btn-sm" title="SPSS syntax with embedded data, variable & value labels">Export SPSS</button>
+            <button id="exportKmzBtn" class="btn btn-outline btn-sm" title="Google Earth / GIS placemarks">Export KMZ</button>
+            <button id="clearLocalBtn" class="btn btn-ghost btn-sm">Remove synced</button>
           </div>
         </div>
-        <div id="localSummary" class="status"></div>
         <div class="table-wrap"><table id="localTable" class="table"></table></div>
       </div>
+    </section>
+
+    <!-- ================= ANALYSIS VIEW ================= -->
+    <section id="analysisView" class="view" hidden>
       <div class="card">
         <div class="card-head">
-          <h2>Cloud database (Google Sheet)</h2>
-          <button id="loadCloudBtn" class="btn btn-outline btn-sm">Load latest</button>
+          <div><h2>Automated analysis</h2><p class="sub" id="anSummary">Descriptive → inferential → reliability → EFA → CFA → SEM → mediation, moderation and higher-order constructs. Re-runs automatically whenever data changes.</p></div>
+          <div class="btn-row">
+            <select id="anSource" class="input input-sm">
+              <option value="auto">Source: auto (cloud if admin connected, else device)</option>
+              <option value="device">Source: device records</option>
+              <option value="cloud">Source: cloud (admin)</option>
+            </select>
+            <label class="check-inline"><input type="checkbox" id="anIncludeSample" checked> include sample data</label>
+            <button id="anSampleBtn" class="btn btn-outline btn-sm">Generate sample data</button>
+            <button id="anSampleClearBtn" class="btn btn-ghost btn-sm">Remove sample</button>
+            <button id="anRunBtn" class="btn btn-primary btn-sm">Re-run</button>
+            <button id="anReportBtn" class="btn btn-outline btn-sm">Download report</button>
+          </div>
         </div>
-        <div id="cloudStatus" class="status"></div>
-        <div class="table-wrap"><table id="cloudTable" class="table"></table></div>
+        <div id="anStatus" class="status"></div>
+      </div>
+      <div id="anBody"></div>
+    </section>
+
+    <!-- ================= ADMIN VIEW ================= -->
+    <section id="adminView" class="view" hidden>
+      <div class="card" id="adminLogin">
+        <div class="card-head"><div><h2>Admin access</h2><p class="sub">Enter the admin token configured in the Apps Script backend (<code>ADMIN_TOKEN</code>) to view and manage all collected data.</p></div></div>
+        <div class="inline-form">
+          <input type="password" id="adminToken" class="input" placeholder="Admin token" autocomplete="off">
+          <button id="adminConnectBtn" class="btn btn-primary">Connect</button>
+        </div>
+        <div id="adminStatus" class="status"></div>
+      </div>
+
+      <div id="adminPanel" hidden>
+        <div class="stats" id="adminStats"></div>
+        <div class="card">
+          <div class="card-head">
+            <div><h2>All submissions</h2><p class="sub" id="adminSummary"></p></div>
+            <div class="btn-row">
+              <input type="search" id="adminSearch" class="input input-sm" placeholder="Search…">
+              <button id="adminRefreshBtn" class="btn btn-outline btn-sm">Refresh</button>
+              <button id="adminExportBtn" class="btn btn-outline btn-sm">CSV</button>
+              <button id="adminExportSpssBtn" class="btn btn-outline btn-sm">SPSS</button>
+              <button id="adminExportKmzBtn" class="btn btn-outline btn-sm">KMZ</button>
+              <a id="adminSheetLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" hidden>Open sheet</a>
+              <button id="adminLogoutBtn" class="btn btn-ghost btn-sm">Disconnect</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table id="adminTable" class="table"></table></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h2>Breakdowns</h2></div></div>
+          <div class="breakdowns" id="adminBreakdowns"></div>
+        </div>
       </div>
     </section>
   </main>
 
-  <!-- Sticky action bar (form view only) -->
+  <!-- Sticky action bar -->
   <div id="actionBar" class="action-bar">
-    <button id="resetBtn" class="btn btn-outline">Clear</button>
+    <button id="resetBtn" class="btn btn-ghost">Clear</button>
     <div class="progress"><div id="progressFill"></div><span id="progressText">0%</span></div>
     <button id="submitBtn" class="btn btn-primary btn-lg">Submit</button>
   </div>
@@ -109,32 +170,71 @@
   <dialog id="settingsDlg">
     <form method="dialog" class="dlg">
       <h2>Settings</h2>
-      <label>Gemini API key
-        <input type="password" id="setKey" class="input" placeholder="AIza..." autocomplete="off">
-        <small>Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>. Stored only in this browser.</small>
-      </label>
-      <label>Gemini model
-        <select id="setModel" class="input">
-          <option value="gemini-2.5-flash">gemini-2.5-flash (fast, recommended)</option>
-          <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (fastest)</option>
-          <option value="gemini-2.5-pro">gemini-2.5-pro (most accurate, slower)</option>
-        </select>
-      </label>
-      <label>Database endpoint (Apps Script Web App URL)
-        <input type="url" id="setEndpoint" class="input" placeholder="https://script.google.com/macros/s/.../exec">
-        <small>See <a href="https://github.com/pulakeshpradhan/geosurvey#database-google-sheets" target="_blank" rel="noopener">README</a> for the 2-minute Google Sheet setup. Leave blank to keep data only on this device.</small>
-      </label>
-      <label>Enumerator name (default)
-        <input type="text" id="setSurveyor" class="input">
-      </label>
-      <label>Image size sent to AI
-        <select id="setMaxDim" class="input">
-          <option value="768">768 px (fastest)</option>
-          <option value="1024" selected>1024 px (balanced)</option>
-          <option value="1536">1536 px (more detail)</option>
-        </select>
-      </label>
-      <label class="check"><input type="checkbox" id="setThumb" checked> Store a small photo thumbnail with each submission</label>
+
+      <fieldset>
+        <legend>Image analysis</legend>
+        <label>Provider
+          <select id="setEngine" class="input">
+            <option value="auto">Auto — Gemini key → OpenRouter key → Chrome built-in AI</option>
+            <option value="gemini">Google Gemini API</option>
+            <option value="openrouter">OpenRouter API (many models, incl. free ones)</option>
+            <option value="chrome">Chrome built-in AI (Gemini Nano, no key)</option>
+          </select>
+          <small>Chrome built-in AI needs a recent desktop Chrome with the Prompt API enabled; it is detected automatically and does not work on most phones.</small>
+        </label>
+        <label>Gemini API key
+          <input type="password" id="setKey" class="input" placeholder="AIza…" autocomplete="off">
+          <small>Free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>. Keys are stored only in this browser.</small>
+        </label>
+        <label>Gemini model
+          <select id="setModel" class="input">
+            <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite — ultra-fast, lightweight (default)</option>
+            <option value="gemini-3.6-flash">gemini-3.6-flash — multi-step reasoning, fewer tokens</option>
+            <option value="gemini-3.7-flash">gemini-3.7-flash — everyday driver</option>
+            <option value="gemini-3.8-flash">gemini-3.8-flash — high-intelligence workhorse</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="text" id="setModelCustom" class="input" placeholder="model id, e.g. gemini-3.5-flash" hidden>
+        </label>
+        <label>OpenRouter API key
+          <input type="password" id="setOrKey" class="input" placeholder="sk-or-…" autocomplete="off">
+          <small>Key from <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Pick any vision-capable model; models ending in <code>:free</code> cost nothing.</small>
+        </label>
+        <label>OpenRouter model
+          <input type="text" id="setOrModel" class="input" list="orModels" placeholder="e.g. google/gemini-2.5-flash">
+          <datalist id="orModels">
+            <option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite — fast, cheap</option>
+            <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="qwen/qwen2.5-vl-72b-instruct:free">Qwen 2.5 VL 72B — free</option>
+            <option value="meta-llama/llama-3.2-11b-vision-instruct:free">Llama 3.2 11B Vision — free</option>
+            <option value="mistralai/mistral-small-3.2-24b-instruct:free">Mistral Small 3.2 — free</option>
+            <option value="openai/gpt-4o-mini">GPT-4o mini</option>
+            <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
+          </datalist>
+        </label>
+        <label>Image size sent to AI
+          <select id="setMaxDim" class="input">
+            <option value="768">768 px — fastest</option>
+            <option value="1024" selected>1024 px — balanced</option>
+            <option value="1536">1536 px — more detail</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Data</legend>
+        <label>Database endpoint (Apps Script Web App URL)
+          <input type="url" id="setEndpoint" class="input" placeholder="https://script.google.com/macros/s/…/exec">
+          <small>See the <a href="https://github.com/pulakeshpradhan/geosurvey#database-google-sheets" target="_blank" rel="noopener">README</a> for the 2-minute Google Sheet setup. Blank = keep data on this device only.</small>
+        </label>
+        <label>Enumerator name (default)
+          <input type="text" id="setSurveyor" class="input">
+        </label>
+        <label class="check"><input type="checkbox" id="setStamp" checked> Stamp photos with date, time, coordinates and address</label>
+        <label class="check"><input type="checkbox" id="setUploadPhotos" checked> Upload stamped photos to Google Drive with each submission</label>
+      </fieldset>
+
       <div class="btn-row end">
         <button value="cancel" class="btn btn-outline">Cancel</button>
         <button value="save" id="saveSettingsBtn" class="btn btn-primary">Save</button>
@@ -142,8 +242,18 @@
     </form>
   </dialog>
 
+  <!-- Photo viewer -->
+  <dialog id="photoDlg" class="photo-dlg">
+    <div class="photo-dlg-body">
+      <div class="photo-dlg-head"><span id="photoDlgTitle"></span><button id="photoDlgClose" class="icon-btn" aria-label="Close">✕</button></div>
+      <div id="photoDlgGallery" class="gallery"></div>
+    </div>
+  </dialog>
+
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <script src="app.js"></script>
+  <script src="exports.js"></script>
+  <script src="analysis.js"></script>
 </body>
 </html>

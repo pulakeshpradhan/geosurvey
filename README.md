@@ -1,14 +1,17 @@
-# GeoSurvey — AI-assisted socio-economic survey
+# GeoSurvey — AI-assisted socio-economic survey with built-in statistics
 
-A free, browser-based household survey form (like Google Forms / KoboToolbox) with three superpowers:
+A free, browser-based household survey platform (in the spirit of Google Forms / KoboToolbox) that runs as a static site on GitHub Pages — no server, no build step — and adds:
 
-| Feature | How it works | Cost |
+| | Feature | How it works |
 |---|---|---|
-| ✨ **Photo → auto-fill** | Capture/upload a photo of the dwelling, assets, a filled paper form or an ID card. The image is compressed in-browser (≤1024 px JPEG) and sent to **Gemini** with a strict JSON schema; matching fields are filled instantly and highlighted for review. | Free tier of Google AI Studio |
-| 📍 **One-click location** | Browser GPS + **OpenStreetMap Nominatim** reverse geocoding → village, PIN/postal code, block, district, state, country, full address. | Free / open source |
-| ☁️ **Database** | Submissions go to a **Google Sheet** through a tiny Apps Script web app. Works offline: records queue on the device and sync when back online. CSV/JSON export built in. | Free |
-
-Runs entirely as a static site — no server, no build step, no frameworks. Installable as a PWA and opens offline.
+| ✨ | **Photo → auto-fill** (whole form or per section) | Compress photos on-device (≤ 1024 px JPEG), send to **Gemini** (default `gemini-3.5-flash-lite`) or any vision model on **OpenRouter** (incl. free ones) with a strict JSON schema; matching fields fill instantly and are highlighted for review. Each section has its own *capture / upload / AI* boxes so you can photograph e.g. the house, the water source or a ration card and fill just that section. Chrome's built-in Gemini Nano is used automatically when the browser exposes it (desktop Chrome only). |
+| 📍 | **One-click location** | Browser GPS + OpenStreetMap **Nominatim** reverse geocoding → village, PIN code, block, district, state, country, full address. |
+| 🖼️ | **Geo/time-stamped photos** | Every photo is stamped (date-time, lat/lon ± accuracy, address, enumerator, section) before storage; up to 12 per household. |
+| ☁️ | **Database** | Submissions → **Google Sheet**; stamped photos → **Google Drive** folder with links in the sheet (tiny Apps Script). Works offline: records queue on the device (IndexedDB for photos) and sync when back online. |
+| 🔐 | **Admin panel** | Token-protected dashboard: totals, breakdowns, search, delete rows, exports. |
+| 📊 | **Analysis tab** | Automatic, in-browser statistics on the collected data (see below) with charts and an auto-written interpretation report. Re-runs whenever data changes. |
+| ⬇️ | **Exports** | CSV, JSON, **SPSS** (`.sps` syntax with embedded data, variable & value labels — Run All in SPSS/PSPP), **KMZ** (Google Earth / QGIS placemarks with all fields and thumbnails). |
+| 📱 | **Mobile-first PWA** | Installable, opens offline, designed for phone data collection. |
 
 **Live:** https://pulakeshpradhan.github.io/geosurvey/
 
@@ -16,44 +19,59 @@ Runs entirely as a static site — no server, no build step, no frameworks. Inst
 
 ## Quick start (enumerator)
 
-1. Open the live link on a phone or laptop.
-2. ⚙️ **Settings** → paste your **Gemini API key** (free at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)) and the **database endpoint** (below). Keys stay in your browser's localStorage only.
-3. Tap **📍 Detect location** → allow location access.
-4. **📷 Capture** or **🖼️ Upload** photo(s) → **✨ Analyze & Fill** → review the yellow (AI-filled) fields, correct anything, fill the rest.
-5. **Submit**. The record is saved on-device and synced to the sheet.
+1. Open the live link on a phone. ⚙️ **Settings** → paste a **Gemini API key** ([free at Google AI Studio](https://aistudio.google.com/app/apikey)) *or* an **OpenRouter key** ([openrouter.ai/keys](https://openrouter.ai/keys)) and the **database endpoint** (below). Keys stay in the browser's localStorage only.
+2. **Detect location** → allow location access.
+3. Add photos at the top (**Capture / Upload → Analyze & fill**) or inside a section (📷 / 🖼️ boxes, then the ✨ icon).
+4. Review the yellow (AI-filled) fields, complete the rest — including the 18 perception statements (1–5) — and **Submit**.
 
-## Database (Google Sheets)
+## Database (Google Sheets + Drive) — 2 minutes
 
-1. Create a new Google Sheet → **Extensions → Apps Script**.
-2. Replace the code with [`backend/Code.gs`](backend/Code.gs) and save.
-3. **Deploy → New deployment → Web app**, *Execute as: Me*, *Who has access: Anyone* → Deploy → authorize → copy the `/exec` URL.
+1. New Google Sheet → **Extensions → Apps Script** → replace the code with [`backend/Code.gs`](backend/Code.gs).
+2. Set `ADMIN_TOKEN` to a long secret (this unlocks the Admin tab). Save.
+3. **Deploy → New deployment → Web app**, *Execute as: Me*, *Who has access: Anyone* → Deploy → authorize (Sheets + Drive) → copy the `/exec` URL.
 4. Paste it in GeoSurvey → ⚙️ Settings → *Database endpoint*.
 
-Each submission becomes one row; new fields become new columns automatically. The **Responses** tab in the app shows both device-local records and the latest rows from the sheet.
+Each submission becomes one row (new fields become new columns automatically); photos are saved to a Drive folder *GeoSurvey Photos* and linked in `photo_urls`. Without a token the endpoint only reveals the row count.
 
-> Prefer another backend? `sendRecord()` in `app.js` is a single `fetch` POST of a flat JSON object — point it at Supabase, Firebase, Airtable, or any webhook.
+## Analysis tab
+
+Everything runs client-side in a Web Worker (`stats-worker.js`, pure JS, no libraries) on device records or — when connected as admin — the whole cloud dataset:
+
+- **Sample size**: margin of error, Cochran target, SEM 10-times rule.
+- **Descriptives**: n, mean, SD, median, min, max, skewness, kurtosis; frequency bar charts; histograms.
+- **Inferential**: Welch t-test, one-way ANOVA (η²), chi-square with Cramér's V, Pearson correlation heat-map, multiple regression (B, SE, β, t, p, R²).
+- **Reliability**: Cronbach's α with item–total correlations.
+- **EFA**: KMO, Bartlett's test, PCA eigenvalues + scree plot, varimax-rotated loadings, communalities, variance explained.
+- **CFA (CB-SEM, maximum likelihood, BFGS)**: χ², df, CFI, TLI, RMSEA, SRMR; standardized loadings with SE/z/p (numerical Hessian); CR, AVE, Fornell–Larcker, HTMT.
+- **Structural model (CB-SEM)**: fit indices, standardized paths, R², SVG path diagram.
+- **PLS-SEM** (path weighting, mode A) with **bootstrapping**: path coefficients, t, p, 95% CI, f², R²; **mediation** (indirect effects, VAF, classification); **moderation** (two-stage interaction, simple slopes); **higher-order construct** (two-stage; *Livelihood Capacity* = Economic Security + Access to Services + Social Capital → Well-being).
+- **Interpretation report** auto-written from thresholds; **Download report** saves a standalone HTML.
+
+Use **Generate sample data** to create synthetic households with a known causal structure (kept separate from real records; remove with one click) to see the pipeline work before fieldwork.
+
+Constructs and the hypothesised model are defined in `CONSTRUCTS` / `STRUCTURAL_MODEL` at the top of [`app.js`](app.js); change them and the analysis adapts.
 
 ## Customising the questionnaire
 
-Edit the `LOCATION_FIELDS`, `SECTIONS` and `REMARKS_FIELDS` arrays at the top of [`app.js`](app.js). Supported types: `text`, `number`, `date`, `tel`, `select`, `multi` (checkboxes), `textarea`. Add `ai: true` to any field you want Gemini to try to fill; `required: true` to enforce it.
+Edit `LOCATION_FIELDS`, `SECTIONS` and `REMARKS_FIELDS` in [`app.js`](app.js). Field types: `text`, `number`, `date`, `tel`, `select`, `multi`, `likert`, `textarea`. `ai: true` exposes a field to the AI; `required: true` enforces it; a section's `photoHint` enables its photo tools.
 
-## Speed & accuracy notes
+## Files
 
-- Images are resized on-device to 768–1536 px (setting) and JPEG-compressed before upload — typically 3–5 MB → ~150 KB, so uploads take under a second on mobile data.
-- `gemini-2.5-flash` is used with `thinkingBudget: 0` and a `responseSchema`, so the model returns only valid enum values and no free text — typical round trip 2–5 s.
-- Select values are matched case-insensitively; anything the model can't map is dropped rather than guessed.
-- Personal fields (name, age, income…) are only filled when a document/form is visible in the photo — never inferred from appearance.
+| File | Purpose |
+|---|---|
+| `index.html`, `styles.css` | UI (Survey / Records / Analysis / Admin) |
+| `app.js` | Questionnaire schema, AI providers, location, photo stamping, offline queue, admin |
+| `exports.js` | CSV, JSON, SPSS syntax, KMZ (own ZIP writer) |
+| `analysis.js`, `stats-worker.js` | Analysis UI + statistics engine |
+| `backend/Code.gs` | Google Apps Script backend |
+| `sw.js`, `manifest.json` | Offline PWA |
 
-## Privacy
+## Privacy & notes
 
-- Gemini key, endpoint and drafts live only in the browser's localStorage.
-- Photos are sent to Google's Gemini API for analysis and are **not** stored in the sheet — only an optional 320 px thumbnail (toggle in Settings).
-- Nominatim is queried with coordinates only; please respect its [usage policy](https://operations.osmfoundation.org/policies/nominatim/) (≤1 request/sec).
-
-## Development
-
-Just open `index.html` — or serve the folder (`npx serve .`) so geolocation/camera work (they require `https://` or `localhost`).
+- Photos go to the chosen AI provider for analysis and to your own Drive; nothing is sent anywhere else.
+- Nominatim is queried with coordinates only — respect its [usage policy](https://operations.osmfoundation.org/policies/nominatim/).
+- Statistical output is for exploratory use; verify key results in SPSS/AMOS/SmartPLS/R before publication.
 
 ## Deploy
 
-Hosted on GitHub Pages from the `main` branch root. Push to `main` and it's live.
+GitHub Pages from `main` (root). Push to `main` and it is live within a minute. Bump `CACHE` in `sw.js` when shipping changes so installed apps refresh.
