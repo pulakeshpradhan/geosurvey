@@ -34,7 +34,7 @@ const Analysis = (() => {
     return `<svg viewBox="0 0 ${W} ${H}" class="chart"><line x1="24" y1="${y(1)}" x2="${W - 10}" y2="${y(1)}" class="svg-ref"/><text x="${W - 8}" y="${y(1) - 3}" class="svg-tick" text-anchor="end">eigenvalue = 1</text><polyline points="${values.map((v, i) => `${x(i)},${y(v)}`).join(' ')}" class="svg-line"/>${values.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3" class="svg-dot"/><text x="${x(i)}" y="${H - 4}" class="svg-tick" text-anchor="middle">${i + 1}</text>`).join('')}</svg>`;
   }
   function heat(labels, R, P) {
-    const cell = (v, p) => { const a = Math.min(1, Math.abs(v)); const bg = v >= 0 ? `rgba(21,94,117,${0.08 + a * 0.6})` : `rgba(180,35,24,${0.08 + a * 0.6})`; return `<td style="background:${bg};color:${a > 0.55 ? '#fff' : 'inherit'}" title="p ${pEq(p)}">${f(v)}${stars(p)}</td>`; };
+    const cell = (v, p) => { const a = Math.min(1, Math.abs(v)); const bg = v >= 0 ? `rgba(52,84,158,${0.08 + a * 0.6})` : `rgba(164,74,48,${0.08 + a * 0.6})`; return `<td style="background:${bg};color:${a > 0.55 ? '#fff' : 'inherit'}" title="p ${pEq(p)}">${f(v)}${stars(p)}</td>`; };
     return `<div class="table-wrap"><table class="table heat"><thead><tr><th></th>${labels.map(l => `<th title="${esc(l)}">${esc(l.length > 14 ? l.slice(0, 13) + '…' : l)}</th>`).join('')}</tr></thead><tbody>${R.map((row, i) => `<tr><th title="${esc(labels[i])}">${esc(labels[i].length > 22 ? labels[i].slice(0, 21) + '…' : labels[i])}</th>${row.map((v, j) => i === j ? '<td class="diag">1</td>' : cell(v, P[i][j])).join('')}</tr>`).join('')}</tbody></table></div>`;
   }
   function pathDiagram(latents, paths, r2 = {}, extra = {}) {

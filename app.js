@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const MAX_PHOTOS = 12;
 
 /* ------------------------------------------------------------------ */
@@ -265,11 +265,14 @@ function renderForm() {
           <label class="tool" title="Capture photo for this section">${CAMERA_SVG}<input type="file" accept="image/*" capture="environment" data-sec="${s.id}" hidden></label>
           <label class="tool" title="Upload photo(s) for this section">${UPLOAD_SVG}<input type="file" accept="image/*" multiple data-sec="${s.id}" hidden></label>
           <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
+          <div class="sec-thumbs" data-thumbs="${s.id}"></div>
         </div>` : ''}
       </div>
       ${s.photoHint ? `<p class="sub sec-hint">${esc(s.photoHint)}</p>` : `<p class="sub sec-hint">Ask the respondent to rate each statement from 1 (strongly disagree) to 5 (strongly agree).</p>`}
       <div class="status sec-status" data-status="${s.id}"></div>
-      <div class="grid">${s.fields.map(fieldHTML).join('')}</div>
+      ${s.fields.every(f => f.type === 'likert')
+        ? `<div class="likert-grid"><div class="likert-head"><span>Statement</span><div class="scale"><span>Strongly disagree</span><span>2</span><span>3</span><span>4</span><span>Strongly agree</span></div></div>${s.fields.map(fieldHTML).join('')}</div>`
+        : `<div class="grid">${s.fields.map(fieldHTML).join('')}</div>`}
     </div>`).join('');
   $('#remarksStep').textContent = String(SECTIONS.length + 2).padStart(2, '0');
   $('#remarksFields').innerHTML = REMARKS_FIELDS.map(fieldHTML).join('');
@@ -487,6 +490,13 @@ function renderThumbs() {
   $$('#thumbStrip .thumb').forEach(t => t.onclick = () => openGallery('Photos for this submission', photos));
   $('#analyzeBtn').disabled = photos.length === 0;
   $$('button[data-ai]').forEach(b => { const n = photos.filter(p => p.section === b.dataset.ai).length; const bd = $('.tool-badge', b); bd.textContent = n; bd.hidden = !n; b.classList.toggle('ready', n > 0); });
+  // small thumbnails beside each section's tools, each with its own delete
+  $$('[data-thumbs]').forEach(strip => {
+    const sec = strip.dataset.thumbs;
+    strip.innerHTML = photos.map((p, i) => p.section === sec ? `<div class="sthumb" data-i="${i}" title="${esc(p.name)} · click to view"><img src="${p.dataUrl}" alt=""><button type="button" class="x" data-i="${i}" title="Remove photo">✕</button></div>` : '').join('');
+    $$('.sthumb', strip).forEach(t => t.onclick = () => openGallery(SECTION_BY_ID[sec].title, photos.filter(p => p.section === sec)));
+    $$('.sthumb .x', strip).forEach(x => x.onclick = e => { e.stopPropagation(); photos.splice(+x.dataset.i, 1); renderThumbs(); });
+  });
   $('#photoCount').textContent = photos.length ? `${photos.length}/${MAX_PHOTOS} photos` : '';
 }
 function openGallery(title, list) {
