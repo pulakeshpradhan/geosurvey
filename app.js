@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.5.3';
+const APP_VERSION = '1.5.4';
 const MAX_PHOTOS = 12;
 
 /* ------------------------------------------------------------------ */
@@ -335,7 +335,7 @@ function clearForm() {
   setValue('surveyor', surveyor || settings.surveyor);
   setValue('survey_date', new Date().toISOString().slice(0, 10));
   photos = []; renderThumbs();
-  $('#aiContext').value = '';
+  if ($('#aiContext')) $('#aiContext').value = '';
   setStatus($('#aiStatus'), ''); setStatus($('#locStatus'), '');
   $$('.sec-status').forEach(s => setStatus(s, ''));
   LS.set('gs_draft', null);
@@ -641,7 +641,7 @@ async function analyzePhotos(section = '', list = null) {
   const engine = activeEngine();
   if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
   const fields = section ? [...SECTION_BY_ID[section].fields.filter(f => f.ai), ALL_FIELDS.find(f => f.k === 'ai_observations')] : AI_FIELDS;
-  const prompt = promptFor(fields, $('#aiContext').value.trim(), section ? SECTION_BY_ID[section].title : '');
+  const prompt = promptFor(fields, ($('#aiContext')?.value || '').trim(), section ? SECTION_BY_ID[section].title : '');
   btn.disabled = true; $$('.sec-tools').forEach(l => l.classList.add('disabled'));
   const t0 = performance.now();
   const onStatus = m => setStatus(st, m, '', true);

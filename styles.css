@@ -123,8 +123,12 @@ main { max-width: 920px; margin: 0 auto; padding: 20px 16px; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .btn-row.end { justify-content: flex-end; margin-top: 6px; }
 .inline-form { display: flex; gap: 8px; max-width: 480px; }
-.photo-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.photo-actions { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.photo-actions h2 { flex: 1; min-width: 140px; }
 .photo-actions .btn-primary { margin-left: auto; }
+#photoCard .thumb-strip { margin: 12px 0 0; }
+#photoCard .status { margin: 6px 0 0; }
+#photoCard .status:empty { display: none; }
 .photo-count { font-size: 13px; color: var(--muted); }
 
 /* Thumbs */
@@ -215,7 +219,10 @@ dialog::backdrop { background: rgba(11,14,19,.5); }
   .sec-tools .sec-thumbs { margin-right: auto; }
   main { padding: 12px; }
   .card { padding: 16px; }
-  .photo-actions .btn-primary { flex-basis: 100%; margin-left: 0; }
+  .photo-actions h2 { flex-basis: 100%; }
+  .photo-count { display: none; }
+  .photo-actions .btn { flex: 1; }
+  .photo-actions .btn-primary { margin-left: auto; }
   .inline-form { flex-direction: column; }
   .input-sm { width: 100%; }
 }
