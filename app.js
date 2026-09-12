@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.6.1';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -975,6 +975,11 @@ function init() {
   offline();
 
   if (!engineReady()) setTimeout(() => toast('Tip: add a Gemini or OpenRouter API key in Settings to enable photo auto-fill'), 800);
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
+    // When an updated service worker takes over, reload once so HTML and scripts never mix versions
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (reloaded) return; reloaded = true; if (navigator.serviceWorker.controller) location.reload(); });
+  }
 }
 document.addEventListener('DOMContentLoaded', init);
