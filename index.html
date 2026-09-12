@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.6.1">
+  <link rel="stylesheet" href="styles.css?v=1.7.0">
 </head>
 <body>
   <header class="topbar">
@@ -123,30 +123,36 @@
 
     <!-- ================= EDIT VIEW: questionnaire designer + collected data ================= -->
     <section id="editView" class="view" hidden>
-      <div class="card">
-        <div class="card-head">
-          <div><h2>Questionnaire designer</h2><p class="sub">Upload your paper questionnaire (PDF or photos) and let the AI draft a refined digital version, or edit sections and questions directly. Nothing changes until you approve.</p></div>
+      <div class="gform">
+        <div class="gform-main">
+          <div class="card gform-intro">
+            <div class="card-head">
+              <div><h2>Questionnaire designer</h2><p class="sub">Click a question to edit it. Drag ⋮⋮ to reorder. Use the toolbar to add questions or sections, or upload your paper questionnaire and let the AI draft it. Nothing changes until you approve.</p></div>
+              <div class="btn-row">
+                <label class="btn btn-outline btn-sm">Upload paper questionnaire (PDF / photos)<input type="file" id="designerFile" accept="application/pdf,image/*" multiple hidden></label>
+                <button id="designerAiBtn" class="btn btn-primary btn-sm" disabled>AI: draft questionnaire</button>
+              </div>
+            </div>
+            <div id="designerIntake" hidden><div id="designerPages" class="thumb-strip"></div></div>
+            <div id="designerStatus" class="status"></div>
+            <div id="designerModel" class="an-note"></div>
+          </div>
+          <div id="designerBody"></div>
         </div>
-        <div class="btn-row">
-          <label class="btn btn-outline btn-sm">Upload PDF / images<input type="file" id="designerFile" accept="application/pdf,image/*" multiple hidden></label>
-          <button id="designerAiBtn" class="btn btn-primary btn-sm" disabled>AI: draft questionnaire</button>
-          <span class="dim">·</span>
-          <button id="designerAddSec" class="btn btn-outline btn-sm">+ Add section</button>
-          <button id="designerReset" class="btn btn-ghost btn-sm">Default questionnaire</button>
-          <button id="designerExport" class="btn btn-ghost btn-sm">Export JSON</button>
-          <label class="btn btn-ghost btn-sm">Import JSON<input type="file" id="designerImport" accept="application/json" hidden></label>
+        <div class="gform-tools">
+          <button id="designerAddQ" class="gtool" title="Add question">⊕</button>
+          <button id="designerAddSec" class="gtool" title="Add section">▤</button>
+          <label class="gtool" title="Import questionnaire (JSON)">⤓<input type="file" id="designerImport" accept="application/json" hidden></label>
+          <button id="designerExport" class="gtool" title="Export questionnaire (JSON)">⤒</button>
+          <button id="designerReset" class="gtool" title="Load the default questionnaire">↺</button>
         </div>
-        <div id="designerPages" class="thumb-strip"></div>
-        <div id="designerStatus" class="status"></div>
-        <div id="designerModel" class="an-note"></div>
       </div>
-      <div id="designerBody"></div>
       <div class="card approve-bar">
-        <div><b>Final approval</b><p class="sub">Apply installs the questionnaire on this device (form, AI fill, exports, PDF and analysis). Publish also stores it in the backend so every enumerator’s device adopts it. <span id="designerDirty" class="pill pending" hidden>unsaved changes</span></p></div>
+        <div><b>Final approval</b> <span id="designerDirty" class="pill pending" hidden>unsaved changes</span><p class="sub approve-hint">Apply = this device · Publish = every enumerator’s device (via backend)</p></div>
         <div class="btn-row">
-          <button id="designerDiscard" class="btn btn-ghost btn-sm">Discard changes</button>
-          <button id="designerApply" class="btn btn-outline">Approve &amp; apply</button>
-          <button id="designerPublish" class="btn btn-primary">Approve &amp; publish to team</button>
+          <button id="designerDiscard" class="btn btn-ghost btn-sm">Discard</button>
+          <button id="designerApply" class="btn btn-outline btn-sm">Approve &amp; apply</button>
+          <button id="designerPublish" class="btn btn-primary btn-sm">Approve &amp; publish</button>
         </div>
       </div>
 
@@ -279,11 +285,11 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=1.6.1"></script>
-  <script src="sav.js?v=1.6.1"></script>
-  <script src="exports.js?v=1.6.1"></script>
-  <script src="analysis.js?v=1.6.1"></script>
-  <script src="pdf.js?v=1.6.1"></script>
-  <script src="designer.js?v=1.6.1"></script>
+  <script src="app.js?v=1.7.0"></script>
+  <script src="sav.js?v=1.7.0"></script>
+  <script src="exports.js?v=1.7.0"></script>
+  <script src="analysis.js?v=1.7.0"></script>
+  <script src="pdf.js?v=1.7.0"></script>
+  <script src="designer.js?v=1.7.0"></script>
 </body>
 </html>

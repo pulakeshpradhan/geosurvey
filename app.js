@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.7.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -192,6 +192,7 @@ let formListenersBound = false;
 /** Install a questionnaire schema (default or designed in the Edit tab) and re-render the form. */
 function applySchema(schema, rerender = true) {
   const s = schema || DEFAULT_SCHEMA;
+  FORM_META = { title: s.title || 'Socio-Economic Household Survey', description: s.description || '' };
   SECTIONS = clone(s.sections);
   REMARKS_FIELDS = clone(s.remarks || DEFAULT_SCHEMA.remarks);
   CONSTRUCTS = deriveConstructs(SECTIONS, s.constructNames || {});
@@ -207,7 +208,8 @@ function applySchema(schema, rerender = true) {
     if (typeof Analysis !== 'undefined') Analysis.schedule();
   }
 }
-function currentSchema() { return { version: (LS.get('gs_schema', null) || {}).version || 1, sections: clone(SECTIONS), remarks: clone(REMARKS_FIELDS), constructNames: Object.fromEntries(Object.entries(CONSTRUCTS).map(([k, c]) => [k, c.name])), model: clone(STRUCTURAL_MODEL) }; }
+let FORM_META = { title: 'Socio-Economic Household Survey', description: '' };
+function currentSchema() { return { version: (LS.get('gs_schema', null) || {}).version || 1, title: FORM_META.title, description: FORM_META.description, sections: clone(SECTIONS), remarks: clone(REMARKS_FIELDS), constructNames: Object.fromEntries(Object.entries(CONSTRUCTS).map(([k, c]) => [k, c.name])), model: clone(STRUCTURAL_MODEL) }; }
 applySchema(LS.get('gs_schema', null), false);
 // Columns that exist on a record but are not questionnaire fields (used by exports)
 const META_FIELDS = [
@@ -291,7 +293,7 @@ function fieldHTML(f) {
     default:
       ctrl = `<input id="${id}" data-key="${f.k}" type="${f.type}" ${f.ro ? 'readonly' : ''} ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''} ${f.type === 'number' ? 'inputmode="numeric"' : ''}>`;
   }
-  return `<div class="field ${f.wide || f.type === 'likert' ? 'wide' : ''} ${f.type === 'likert' ? 'likert-field' : ''}" data-field="${f.k}"><label for="${id}">${esc(f.label)}${req}</label>${ctrl}<span class="ai-tag">AI</span></div>`;
+  return `<div class="field ${f.wide || f.type === 'likert' ? 'wide' : ''} ${f.type === 'likert' ? 'likert-field' : ''}" data-field="${f.k}"><label for="${id}">${esc(f.label)}${req}${f.help ? `<small class="help">${esc(f.help)}</small>` : ''}</label>${ctrl}<span class="ai-tag">AI</span></div>`;
 }
 
 function renderForm() {

@@ -28,8 +28,8 @@ const PdfExport = (() => {
       doc.setFillColor(...C.cream); doc.rect(0, 0, W, 26, 'F');
       doc.setFillColor(...C.blue); doc.roundedRect(M, 7, 8, 8, 2, 2, 'F');
       doc.setFillColor(255, 255, 255); doc.circle(M + 4, 10.6, 1.6, 'F');
-      setFont('bold', 15); doc.text('Socio-Economic Household Survey', M + 12, 12.5);
-      setFont('normal', 8.5, C.muted); doc.text('GeoSurvey · AI-assisted field questionnaire', M + 12, 17.5);
+      setFont('bold', 15); doc.text(clean(FORM_META.title || 'Socio-Economic Household Survey').slice(0, 60), M + 12, 12.5);
+      setFont('normal', 8.5, C.muted); doc.text(clean(FORM_META.description || 'GeoSurvey · AI-assisted field questionnaire').slice(0, 110), M + 12, 17.5);
       setFont('bold', 8.5, C.blue); doc.text(`Ref ${ref}`, W - M, 11, { align: 'right' });
       setFont('normal', 8.5, C.muted); doc.text(clean(`${rec.survey_date || new Date().toISOString().slice(0, 10)} · ${rec.surveyor || 'Enumerator'}`), W - M, 16, { align: 'right' });
       doc.setDrawColor(...C.line); doc.setLineWidth(0.4); doc.line(M, 26, W - M, 26);
