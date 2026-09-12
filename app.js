@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const MAX_PHOTOS = 12;
 
 /* ------------------------------------------------------------------ */
@@ -841,6 +841,7 @@ function showView(id) {
   $$('.view').forEach(v => v.hidden = v.id !== id);
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === id));
   $('#actionBar').hidden = id !== 'formView';
+  $('#pdfBtn').hidden = id !== 'formView';
   if (id === 'responsesView') renderLocalTable();
   if (id === 'analysisView' && window.Analysis) Analysis.open();
   if (id === 'adminView' && adminToken() && $('#adminPanel').hidden) adminConnect();
