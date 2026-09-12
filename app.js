@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.5.2';
+const APP_VERSION = '1.5.3';
 const MAX_PHOTOS = 12;
 
 /* ------------------------------------------------------------------ */
@@ -262,9 +262,9 @@ function renderForm() {
           <span class="step">${String(i + 2).padStart(2, '0')}</span><h2>${esc(s.title)}</h2><span class="section-count" data-count="${s.id}"></span><span class="chev">▼</span>
         </button>
         ${s.photoHint ? `<div class="sec-tools">
+          <div class="sec-thumbs" data-thumbs="${s.id}"></div>
           <label class="tool" title="Capture a photo for this section with the camera">${CAMERA_SVG}<input type="file" accept="image/*" capture="environment" data-sec="${s.id}" hidden></label>
           <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
-          <div class="sec-thumbs" data-thumbs="${s.id}"></div>
         </div>` : ''}
       </div>
       ${s.photoHint ? `<p class="sub sec-hint">${esc(s.photoHint)}</p>` : `<p class="sub sec-hint">Ask the respondent to rate each statement from 1 (strongly disagree) to 5 (strongly agree).</p>`}
