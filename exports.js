@@ -37,7 +37,7 @@ const Exports = (() => {
         vars.push({ name: k, label: f.label + ' (all selected)', kind: 'str', width: width(r => val(r, k)), measure: 'nominal', get: r => val(r, k) });
         f.options.forEach((o, i) => vars.push({ name: `${k}_${i + 1}`, label: `${f.label}: ${o}`, kind: 'num', width: 1, measure: 'nominal', values: [[0, 'No'], [1, 'Yes']], get: r => val(r, k) ? (getList(r).includes(o.toLowerCase()) ? 1 : 0) : '' }));
       } else if (f.type === 'likert') {
-        vars.push({ name: k, label: f.label, kind: 'num', width: 1, measure: 'ordinal', values: LIKERT.map((l, i) => [i + 1, l]), get: r => { const n = parseInt(val(r, k), 10); return isNaN(n) ? '' : n; } });
+        vars.push({ name: k, label: f.label, kind: 'num', width: 2, measure: 'ordinal', values: scaleOf(f).labels.map((l, i) => [i + 1, l]), get: r => { const n = parseInt(val(r, k), 10); return isNaN(n) ? '' : n; } });
       } else if (f.type === 'number' || ['latitude', 'longitude', 'gps_accuracy_m', 'altitude_m'].includes(k)) {
         const dec = ['latitude', 'longitude'].includes(k) ? 6 : 0;
         vars.push({ name: k, label: f.label, kind: 'num', width: dec ? 12 : 8, decimals: dec, measure: 'scale', get: r => { const n = parseFloat(val(r, k)); return isNaN(n) ? '' : n; } });

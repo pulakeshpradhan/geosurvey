@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -136,6 +136,14 @@ let STRUCTURAL_MODEL = {
   higherOrder: { key: 'LC', name: 'Livelihood Capacity', lower: ['ES', 'AS', 'SC'], outcome: 'WB', covariates: ['GS'] },
 };
 const LIKERT = ['Strongly disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly agree'];
+/** Linear-scale definition for a Likert-type question: { max, lo, hi, labels[] } (default 1–5 agreement scale). */
+function scaleOf(f) {
+  const max = Math.min(10, Math.max(3, +(f.scale?.max || 5)));
+  const custom = f.scale && (f.scale.max || f.scale.lo || f.scale.hi);
+  const lo = f.scale?.lo || (custom && max !== 5 ? 'Lowest' : LIKERT[0]), hi = f.scale?.hi || (custom && max !== 5 ? 'Highest' : LIKERT[4]);
+  const labels = max === 5 && !f.scale?.lo && !f.scale?.hi ? LIKERT : Array.from({ length: max }, (_, i) => i === 0 ? `${i + 1} – ${lo}` : i === max - 1 ? `${i + 1} – ${hi}` : String(i + 1));
+  return { max, lo, hi, labels };
+}
 SECTIONS.push({
   id: 'perception', title: 'Perceptions (1 = strongly disagree … 5 = strongly agree)',
   fields: [
@@ -188,6 +196,7 @@ function deriveModel(constructs, stored) {
   const outcome = keys[keys.length - 1];
   return { paths: keys.filter(k => k !== outcome).map(k => [k, outcome]), mediations: [], moderation: null, higherOrder: null };
 }
+const EMPTY_SCHEMA = { version: 0, title: '', description: '', sections: [], remarks: clone(REMARKS_FIELDS), constructNames: {}, model: null };
 let formListenersBound = false;
 /** Install a questionnaire schema (default or designed in the Edit tab) and re-render the form. */
 function applySchema(schema, rerender = true) {
@@ -210,7 +219,9 @@ function applySchema(schema, rerender = true) {
 }
 let FORM_META = { title: 'Socio-Economic Household Survey', description: '' };
 function currentSchema() { return { version: (LS.get('gs_schema', null) || {}).version || 1, title: FORM_META.title, description: FORM_META.description, sections: clone(SECTIONS), remarks: clone(REMARKS_FIELDS), constructNames: Object.fromEntries(Object.entries(CONSTRUCTS).map(([k, c]) => [k, c.name])), model: clone(STRUCTURAL_MODEL) }; }
-applySchema(LS.get('gs_schema', null), false);
+applySchema(LS.get('gs_schema', null) || EMPTY_SCHEMA, false);
+/** Install the built-in sample questionnaire (18 Likert items, 5 constructs, structural model). */
+function useSampleQuestionnaire() { const d = clone(DEFAULT_SCHEMA); d.version = Date.now(); LS.set('gs_schema', d); applySchema(d); toast('Sample questionnaire installed — customise it any time in Edit', 'ok'); }
 // Columns that exist on a record but are not questionnaire fields (used by exports)
 const META_FIELDS = [
   { k: 'id', label: 'Record ID', type: 'text' }, { k: 'submitted_at', label: 'Submitted at', type: 'text' },
@@ -286,8 +297,10 @@ function fieldHTML(f) {
       ctrl = `<select id="${id}" data-key="${f.k}"><option value="">Select…</option>${f.options.map(o => `<option>${esc(o)}</option>`).join('')}</select>`; break;
     case 'multi':
       ctrl = `<div class="checks" data-key="${f.k}">${f.options.map(o => `<label><input type="checkbox" value="${esc(o)}">${esc(o)}</label>`).join('')}</div>`; break;
-    case 'likert':
-      ctrl = `<div class="likert" data-key="${f.k}" role="radiogroup">${LIKERT.map((l, i) => `<label title="${esc(l)}"><input type="radio" name="${id}" value="${i + 1}"><span>${i + 1}</span></label>`).join('')}</div>`; break;
+    case 'likert': {
+      const sc = scaleOf(f);
+      ctrl = `<div class="likert" data-key="${f.k}" role="radiogroup" style="--n:${sc.max}"><span class="lk-end lo">${esc(sc.lo)}</span>${sc.labels.map((l, i) => `<label title="${esc(l)}"><input type="radio" name="${id}" value="${i + 1}"><span>${i + 1}</span></label>`).join('')}<span class="lk-end hi">${esc(sc.hi)}</span></div>`; break;
+    }
     case 'textarea':
       ctrl = `<textarea id="${id}" data-key="${f.k}" ${f.ro ? 'readonly' : ''}></textarea>`; break;
     default:
@@ -297,6 +310,10 @@ function fieldHTML(f) {
 }
 
 function renderForm() {
+  const empty = SECTIONS.length === 0;
+  $('#onboarding').hidden = !empty;
+  ['#photoCard', '#locationCard', '#remarksCard'].forEach(s => { const el = $(s); if (el) el.hidden = empty; });
+  $('#actionBar').classList.toggle('disabled', empty);
   $('#locFields').innerHTML = LOCATION_FIELDS.map(fieldHTML).join('');
   $('#sections').innerHTML = SECTIONS.map((s, i) => `
     <div class="card" data-section="${s.id}">
@@ -310,10 +327,10 @@ function renderForm() {
           <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
         </div>` : ''}
       </div>
-      ${s.photoHint ? `<p class="sub sec-hint">${esc(s.photoHint)}</p>` : `<p class="sub sec-hint">Ask the respondent to rate each statement from 1 (strongly disagree) to 5 (strongly agree).</p>`}
+      ${s.photoHint ? `<p class="sub sec-hint">${esc(s.photoHint)}</p>` : `<p class="sub sec-hint">Ask the respondent to rate each statement on the scale shown.</p>`}
       <div class="status sec-status" data-status="${s.id}"></div>
       ${s.fields.every(f => f.type === 'likert')
-        ? `<div class="likert-grid"><div class="likert-head"><span>Statement</span><div class="scale"><span>Strongly disagree</span><span>2</span><span>3</span><span>4</span><span>Strongly agree</span></div></div>${s.fields.map(fieldHTML).join('')}</div>`
+        ? `<div class="likert-grid"><div class="likert-head"><span>Statement</span><span>Rating</span></div>${s.fields.map(fieldHTML).join('')}</div>`
         : `<div class="grid">${s.fields.map(fieldHTML).join('')}</div>`}
     </div>`).join('');
   $('#remarksStep').textContent = String(SECTIONS.length + 2).padStart(2, '0');
@@ -391,7 +408,7 @@ function updateProgress() {
   const fields = ALL_FIELDS.filter(f => !f.ro && !['ai_observations', 'remarks', 'full_address'].includes(f.k));
   const filled = f => { const v = getValue(f.k); return Array.isArray(v) ? v.length > 0 : v !== ''; };
   const done = fields.filter(filled).length;
-  const pct = Math.round(done / fields.length * 100);
+  const pct = fields.length ? Math.round(done / fields.length * 100) : 0;
   $('#progressFill').style.width = pct + '%';
   $('#progressText').textContent = `${pct}% · ${done}/${fields.length}`;
   SECTIONS.forEach(s => { $(`[data-count="${s.id}"]`).textContent = `${s.fields.filter(filled).length}/${s.fields.length}`; });
@@ -761,6 +778,7 @@ function validate() {
   return ok;
 }
 async function submitForm() {
+  if (!SECTIONS.length) return toast('Design or load a questionnaire first (Edit)', 'err');
   if (!validate()) return toast('Please fill the required fields (*)', 'err');
   const btn = $('#submitBtn'); btn.disabled = true;
   try {
@@ -932,6 +950,9 @@ function init() {
 
   $$('.tab').forEach(t => t.onclick = () => showView(t.dataset.view));
   $('#editBtn').onclick = () => showView('editView');
+  $('#obDesign').onclick = () => { showView('editView'); if (typeof Designer !== 'undefined') Designer.startBlank(); };
+  $('#obSample').onclick = useSampleQuestionnaire;
+  $('#obUpload').onclick = () => { showView('editView'); $('#designerFile').click(); };
   // Team questionnaire: adopt a newer schema published through the backend
   if (settings.endpoint && navigator.onLine) fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=schema').then(r => r.json()).then(j => {
     if (j.ok && j.schema && j.schema.version > (LS.get('gs_schema', { version: 0 }).version || 0)) { LS.set('gs_schema', j.schema); applySchema(j.schema); toast('Questionnaire updated to the team version', 'ok'); }

@@ -19,14 +19,15 @@ const Designer = (() => {
   const allKeys = d => new Set([...LOCATION_FIELDS.map(f => f.k), ...d.sections.flatMap(s => s.fields.map(f => f.k)), ...d.remarks.map(f => f.k)]);
   const TYPES = [
     ['text', 'Short answer', '≡'], ['textarea', 'Paragraph', '¶'], ['select', 'Multiple choice', '◉'], ['multi', 'Checkboxes', '☑'],
-    ['likert', 'Linear scale 1–5', '⇹'], ['number', 'Number', '#'], ['date', 'Date', '📅'], ['tel', 'Phone', '☎'],
+    ['likert', 'Linear scale', '⇹'], ['number', 'Number', '#'], ['date', 'Date', '📅'], ['tel', 'Phone', '☎'],
   ];
   const typeName = t => (TYPES.find(x => x[0] === t) || TYPES[0])[1];
 
   /* ---------- state ---------- */
   function load() { const saved = LS.get(DRAFT_KEY, null); draft = saved && saved.sections ? saved : currentSchema(); dirty = !!saved; active = null; render(); }
   function persist() { LS.set(DRAFT_KEY, draft); dirty = true; $('#designerDirty').hidden = false; }
-  function reset() { if (!confirm('Replace the draft with the default questionnaire?')) return; draft = clone(DEFAULT_SCHEMA); active = null; persist(); render(); }
+  function loadSample() { if (draft.sections.length && !confirm('Replace the current draft with the sample questionnaire?')) return; draft = clone(DEFAULT_SCHEMA); active = null; persist(); render(); toast('Sample questionnaire loaded — customise, then Apply', 'ok'); }
+  function startBlank(ask = true) { if (ask && draft?.sections.length && !confirm('Start a blank questionnaire? The current draft will be replaced.')) return; draft = { ...clone(EMPTY_SCHEMA), title: draft?.title || '', sections: [{ id: 'section_1', title: 'Section 1', photoHint: '', fields: [{ k: '', label: '', type: 'text', ai: true }] }] }; active = '0:0'; persist(); render(); }
   function discard() { draft = currentSchema(); LS.set(DRAFT_KEY, null); dirty = false; active = null; render(); }
 
   /* ---------- rendering ---------- */
@@ -34,7 +35,7 @@ const Designer = (() => {
     switch (f.type) {
       case 'select': return `<div class="pv-opts">${(f.options || []).slice(0, 6).map(o => `<div><span class="pv-radio"></span>${esc(o)}</div>`).join('')}${(f.options || []).length > 6 ? `<div class="dim">+ ${f.options.length - 6} more</div>` : ''}</div>`;
       case 'multi': return `<div class="pv-opts">${(f.options || []).slice(0, 6).map(o => `<div><span class="pv-check"></span>${esc(o)}</div>`).join('')}${(f.options || []).length > 6 ? `<div class="dim">+ ${f.options.length - 6} more</div>` : ''}</div>`;
-      case 'likert': return `<div class="pv-scale"><span class="dim">${esc(LIKERT[0])}</span>${[1, 2, 3, 4, 5].map(n => `<span class="pv-num">${n}</span>`).join('')}<span class="dim">${esc(LIKERT[4])}</span></div>`;
+      case 'likert': { const sc = scaleOf(f); return `<div class="pv-scale"><span class="dim">${esc(sc.lo)}</span>${Array.from({ length: sc.max }, (_, n) => `<span class="pv-num">${n + 1}</span>`).join('')}<span class="dim">${esc(sc.hi)}</span></div>`; }
       case 'textarea': return `<div class="pv-line long">Long answer text</div>`;
       case 'date': return `<div class="pv-line">Month, day, year</div>`;
       case 'number': return `<div class="pv-line">Number</div>`;
@@ -56,8 +57,12 @@ const Designer = (() => {
       ${f.help != null ? `<input class="input gq-helpin" data-prop="help" value="${esc(f.help)}" placeholder="Description / help text shown under the question">` : ''}
       ${hasOpts ? `<div class="gq-opts">${(f.options || []).map((o, oi) => `<div class="gq-opt"><span class="${f.type === 'select' ? 'pv-radio' : 'pv-check'}"></span><input class="input" data-opt="${oi}" value="${esc(o)}" placeholder="Option ${oi + 1}"><button type="button" class="icon-btn" data-act="odel" data-oi="${oi}" title="Remove option">✕</button></div>`).join('')}
         <div class="gq-opt add"><span class="${f.type === 'select' ? 'pv-radio' : 'pv-check'}"></span><button type="button" class="link-btn" data-act="oadd">Add option</button></div></div>` : ''}
-      ${f.type === 'likert' ? `<div class="gq-scale"><div class="pv-scale"><span class="dim">1 · ${esc(LIKERT[0])}</span>${[1, 2, 3, 4, 5].map(n => `<span class="pv-num">${n}</span>`).join('')}<span class="dim">5 · ${esc(LIKERT[4])}</span></div>
-        <label class="gq-inline">Construct code <input class="input input-xs" data-prop="c" value="${esc(f.c || '')}" placeholder="ES" maxlength="4"><span class="dim">statements sharing a code form one construct for reliability, factor analysis and SEM (≥ 2 items)</span></label></div>` : ''}
+      ${f.type === 'likert' ? (() => { const sc = scaleOf(f); return `<div class="gq-scale">
+        ${previewControl(f)}
+        <div class="gq-scale-row"><span>1</span><span class="dim">to</span><select class="input input-xs" data-scale="max">${[3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option ${sc.max === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="gq-scale-row"><span class="pv-num sm">1</span><input class="input gq-scale-lbl" data-scale="lo" value="${esc(f.scale?.lo || '')}" placeholder="${esc(sc.lo)} (label, optional)"></div>
+        <div class="gq-scale-row"><span class="pv-num sm">${sc.max}</span><input class="input gq-scale-lbl" data-scale="hi" value="${esc(f.scale?.hi || '')}" placeholder="${esc(sc.hi)} (label, optional)"></div>
+        <label class="gq-inline">Construct code <input class="input input-xs" data-prop="c" value="${esc(f.c || '')}" placeholder="ES" maxlength="4"><span class="dim">scale items sharing a code form one construct for reliability, factor analysis and SEM (≥ 2 items)</span></label></div>`; })() : ''}
       ${['text', 'number', 'date', 'tel', 'textarea'].includes(f.type) ? previewControl(f) : ''}
       <div class="gq-foot">
         <button type="button" class="icon-btn" data-act="fdup" title="Duplicate">⧉</button>
@@ -73,6 +78,11 @@ const Designer = (() => {
   function render() {
     const host = $('#designerBody'); if (!host || !draft) return;
     const n = draft.sections.length;
+    if (!draft.sections.length) {
+      host.innerHTML = `<div class="gempty"><h2>Start your questionnaire</h2><p class="dim">Design from scratch, load the sample, or upload a paper questionnaire and let the AI draft it.</p>
+        <div class="ob-grid"><button class="ob-tile" data-start="blank"><span class="ob-ic">✎</span><b>Design your own</b><span>Sections and questions, form-style.</span></button><button class="ob-tile" data-start="sample"><span class="ob-ic">▤</span><b>Sample questionnaire</b><span>Household survey with 5 perception constructs.</span></button><button class="ob-tile" data-start="upload"><span class="ob-ic">⇪</span><b>Upload paper form</b><span>PDF / photos → converted as printed.</span></button></div></div>`;
+      $('#designerModel').innerHTML = ''; $('#designerDirty').hidden = !dirty; return;
+    }
     host.innerHTML = `<div class="gsec gform-head"><div class="gform-bar"></div>
         <input class="input gform-title" data-form="title" value="${esc(draft.title || 'Socio-Economic Household Survey')}" placeholder="Form title">
         <input class="input gform-desc" data-form="description" value="${esc(draft.description || '')}" placeholder="Form description (shown on the PDF)">
@@ -103,6 +113,7 @@ const Designer = (() => {
     if (t.dataset.cname) { draft.constructNames = draft.constructNames || {}; draft.constructNames[t.dataset.cname] = t.value; persist(); return; }
     if (t.dataset.r != null) { draft.remarks[+t.dataset.r].label = t.value; persist(); return; }
     if (t.dataset.opt != null) { const { f } = fieldAt(t); f.options[+t.dataset.opt] = t.value; persist(); return; }
+    if (t.dataset.scale) { const { f } = fieldAt(t); f.scale = f.scale || {}; if (t.dataset.scale === 'max') { f.scale.max = +t.value; persist(); render(); } else { f.scale[t.dataset.scale] = t.value; persist(); } return; }
     const prop = t.dataset.prop; if (!prop) return;
     const sec = draft.sections[+t.closest('[data-s]').dataset.s]; const { f } = fieldAt(t); const target = f || sec;
     if (t.type === 'checkbox') target[prop] = t.checked;
@@ -114,6 +125,8 @@ const Designer = (() => {
     if (prop === 'label' && f) { const card = t.closest('.gq'); /* keep preview text in sync lazily */ card.dataset.label = t.value; }
   }
   function onClick(e) {
+    const st = e.target.closest('[data-start]');
+    if (st) { const k = st.dataset.start; if (k === 'blank') startBlank(false); else if (k === 'sample') loadSample(); else $('#designerFile').click(); return; }
     const b = e.target.closest('[data-act]');
     if (!b) { // click on an inactive question card → activate
       const q = e.target.closest('.gq'); if (q && q.dataset.f != null && !q.classList.contains('active')) { active = `${q.closest('[data-s]').dataset.s}:${q.dataset.f}`; render(); }
@@ -181,7 +194,7 @@ const Designer = (() => {
         f.k = uniqueKey(slug(f.k || f.label), taken); f.label = (f.label || '').trim();
         if (!FIELD_TYPES.includes(f.type)) f.type = 'text';
         if (f.type === 'select' || f.type === 'multi') f.options = (f.options || []).map(o => String(o).trim()).filter(Boolean); else delete f.options;
-        if (f.type === 'likert') { f.c = String(f.c || '').toUpperCase(); delete f.ai; } else delete f.c;
+        if (f.type === 'likert') { f.c = String(f.c || '').toUpperCase(); delete f.ai; if (f.scale) { const sc = { max: Math.min(10, Math.max(3, +f.scale.max || 5)) }; if (f.scale.lo?.trim()) sc.lo = f.scale.lo.trim(); if (f.scale.hi?.trim()) sc.hi = f.scale.hi.trim(); f.scale = sc; if (sc.max === 5 && !sc.lo && !sc.hi) delete f.scale; } } else { delete f.c; delete f.scale; }
         if (f.type === 'multi' && f.options?.length > 6) f.wide = true;
         if (!f.help) delete f.help;
       });
@@ -244,7 +257,7 @@ const Designer = (() => {
         else if (f.type.startsWith('image/')) { const c = await compressImage(f, 1600); pages.push({ dataUrl: canvasToDataUrl(c.canvas, 0.85).dataUrl, label: f.name }); }
       } catch (e) { toast(`${f.name}: ${e.message}`, 'err'); }
     }
-    setStatus(st, pages.length ? `${pages.length} page image(s) ready — click "AI: draft questionnaire".` : '', 'ok');
+    setStatus(st, pages.length ? `${pages.length} page image(s) ready — click "Convert" to transcribe them as printed.` : '', 'ok');
     renderPages();
   }
   function renderPages() {
@@ -254,49 +267,72 @@ const Designer = (() => {
     $('#designerIntake').hidden = !pages.length;
   }
 
-  /* ---------- AI refinement ---------- */
-  const AI_PROMPT = () => `You are a survey-methodology assistant. The images show a paper questionnaire (or notes) for a household socio-economic survey. Produce a refined digital questionnaire that captures every question in the document, organised into logical sections, with clear neutral wording and closed options wherever the document implies categories.
-
-Rules:
-- Output JSON: { "sections": [ { "title", "photoHint", "fields": [ { "key", "label", "help", "type", "options", "required", "construct" } ] } ] }.
-- type ∈ text | number | date | tel | select | multi | likert | textarea. Use select for single choice, multi for tick-all-that-apply, likert for 1–5 agreement statements (put agreement statements of one theme together with the same 2-letter "construct" code, e.g. ES, at least 3 items per construct), textarea for open answers.
-- key: short snake_case identifier, unique. Reuse a key from the EXISTING questionnaire when the question means the same thing so historical data stays comparable.
-- help: optional one-line instruction for the enumerator (null if none).
-- photoHint: one sentence on what a field enumerator should photograph so an AI can pre-fill that section (empty string for Likert-only sections).
-- Do not include location / GPS / enumerator fields — they are captured automatically.
-- Keep good existing questions that the document does not contradict; drop existing ones the document clearly replaces.
-
-EXISTING questionnaire (JSON):
-${JSON.stringify({ sections: draft.sections.map(s => ({ title: s.title, fields: s.fields.map(f => ({ key: f.k, label: f.label, type: f.type, options: f.options, construct: f.c })) })) })}`;
-  const AI_SCHEMA = { type: 'OBJECT', properties: { sections: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, photoHint: { type: 'STRING', nullable: true }, fields: { type: 'ARRAY', items: { type: 'OBJECT', properties: { key: { type: 'STRING' }, label: { type: 'STRING' }, help: { type: 'STRING', nullable: true }, type: { type: 'STRING', enum: FIELD_TYPES }, options: { type: 'ARRAY', items: { type: 'STRING' }, nullable: true }, required: { type: 'BOOLEAN', nullable: true }, construct: { type: 'STRING', nullable: true } }, required: ['key', 'label', 'type'] } } }, required: ['title', 'fields'] } } }, required: ['sections'] };
-  async function aiDraft() {
-    if (!pages.length) return;
+  /* ---------- AI: verbatim conversion of an uploaded questionnaire, or improvement of the draft ---------- */
+  const SCHEMA_RULES = `Output JSON only: { "title", "sections": [ { "title", "photoHint", "fields": [ { "key", "label", "help", "type", "options", "required", "construct", "scale_max", "scale_low", "scale_high" } ] } ] }.
+- type ∈ text | number | date | tel | select | multi | likert | textarea. select = single choice, multi = tick-all-that-apply, likert = a numbered rating scale (give scale_max 3–10 and the printed end labels scale_low / scale_high), textarea = open answer, number/date/tel when the answer is clearly a number/date/phone.
+- key: short snake_case identifier, unique. Reuse a key from the EXISTING questionnaire whenever the question means the same thing (keeps historical data comparable).
+- construct: for rating-scale statements that belong to one theme, a 2-letter code shared by the theme's statements (null otherwise).
+- help: an instruction printed under the question (null if none). photoHint: one sentence on what an enumerator should photograph for the section (empty string for rating-scale sections).
+- Do not include location / GPS / date / enumerator fields — they are captured automatically.`;
+  const CONVERT_PROMPT = () => `You are converting a paper questionnaire into a digital form. The images are the pages of the questionnaire. TRANSCRIBE IT FAITHFULLY: keep every question, its exact wording, its numbering order, every answer option with its exact text, section headings, instructions and scale end labels exactly as printed. Do NOT add, merge, drop, reorder or reword anything; do not invent options. Only choose the closest field type for each question. If a page is unreadable, transcribe what is legible and keep going.
+${SCHEMA_RULES}
+EXISTING questionnaire keys you may reuse when a question matches exactly (JSON):
+${JSON.stringify({ sections: draft.sections.map(s => ({ title: s.title, fields: s.fields.map(f => ({ key: f.k, label: f.label })) })) })}`;
+  const IMPROVE_PROMPT = instr => `You are a survey-methodology expert improving a household socio-economic questionnaire. Return an improved version of the CURRENT questionnaire below: clear, neutral, unambiguous wording; complete and mutually exclusive answer options; sensible field types; logical section order; consistent rating scales; add commonly needed questions only where a gap is obvious; keep everything that already works. Keep existing keys for questions you keep (even if reworded).${instr ? `\n\nSPECIFIC INSTRUCTIONS FROM THE USER (follow these first): ${instr}` : ''}
+${SCHEMA_RULES}
+CURRENT questionnaire (JSON):
+${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ title: s.title, photoHint: s.photoHint, fields: s.fields.map(f => ({ key: f.k, label: f.label, help: f.help, type: f.type, options: f.options, required: f.required, construct: f.c, scale_max: f.scale?.max, scale_low: f.scale?.lo, scale_high: f.scale?.hi })) })) })}`;
+  const AI_SCHEMA = { type: 'OBJECT', properties: { title: { type: 'STRING', nullable: true }, sections: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, photoHint: { type: 'STRING', nullable: true }, fields: { type: 'ARRAY', items: { type: 'OBJECT', properties: { key: { type: 'STRING' }, label: { type: 'STRING' }, help: { type: 'STRING', nullable: true }, type: { type: 'STRING', enum: FIELD_TYPES }, options: { type: 'ARRAY', items: { type: 'STRING' }, nullable: true }, required: { type: 'BOOLEAN', nullable: true }, construct: { type: 'STRING', nullable: true }, scale_max: { type: 'INTEGER', nullable: true }, scale_low: { type: 'STRING', nullable: true }, scale_high: { type: 'STRING', nullable: true } }, required: ['key', 'label', 'type'] } } }, required: ['title', 'fields'] } } }, required: ['sections'] };
+  async function askAI(prompt, images, temperature) {
+    if (activeEngine() === 'gemini') {
+      const body = { contents: [{ role: 'user', parts: [{ text: prompt }, ...images.map(p => ({ inline_data: { mime_type: 'image/jpeg', data: p.dataUrl.split(',')[1] } }))] }], generationConfig: { responseMimeType: 'application/json', responseSchema: AI_SCHEMA, temperature, maxOutputTokens: 16000 } };
+      let r = await geminiCall(settings.model, body);
+      if (r.error) r = await geminiCall(settings.model, { ...body, generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: 16000 } });
+      if (r.error) r = await geminiCall(GEMINI_FALLBACK, body);
+      if (r.error) throw new Error(r.error.message);
+      return extractJson(r.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || '');
+    }
+    if (activeEngine() === 'openrouter') {
+      const content = [{ type: 'text', text: prompt }, ...images.map(p => ({ type: 'image_url', image_url: { url: p.dataUrl } }))];
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.orKey}`, 'HTTP-Referer': location.origin, 'X-Title': 'GeoSurvey' }, body: JSON.stringify({ model: settings.orModel, messages: [{ role: 'user', content }], temperature, max_tokens: 12000, response_format: { type: 'json_object' } }) });
+      const j = await r.json(); if (j.error) throw new Error(j.error.message);
+      const c = j.choices?.[0]?.message?.content; return extractJson(typeof c === 'string' ? c : (c || []).map(t => t.text || '').join(''));
+    }
+    throw new Error('Questionnaire conversion needs Gemini or OpenRouter');
+  }
+  function adoptAI(out, mode) {
+    if (!Array.isArray(out.sections) || !out.sections.length) throw new Error('AI returned no sections');
+    const taken = new Set(LOCATION_FIELDS.map(f => f.k));
+    const sections = out.sections.map((s, i) => ({ id: slug(s.title || `section_${i + 1}`), title: s.title || `Section ${i + 1}`, photoHint: s.photoHint || undefined, fields: (s.fields || []).map(f => {
+      const t = FIELD_TYPES.includes(f.type) ? f.type : 'text'; const q = { k: uniqueKey(slug(f.key || f.label), taken), label: f.label || '', type: t, required: !!f.required };
+      if (f.help) q.help = f.help; if (t === 'select' || t === 'multi') q.options = (f.options || []).map(String).filter(Boolean);
+      if (t === 'likert') { q.c = String(f.construct || '').toUpperCase().slice(0, 4) || 'C1'; const sc = {}; if (f.scale_max && +f.scale_max !== 5) sc.max = +f.scale_max; if (f.scale_low) sc.lo = f.scale_low; if (f.scale_high) sc.hi = f.scale_high; if (Object.keys(sc).length) q.scale = sc; } else q.ai = true;
+      return q; }) }));
+    draft = { ...draft, title: out.title || draft.title, sections }; active = null; persist(); render();
+    const nq = sections.reduce((n, s) => n + s.fields.length, 0);
+    setStatus($('#designerStatus'), mode === 'convert' ? `Converted ${pages.length} page(s) into ${sections.length} sections / ${nq} questions, as printed. Check it against the original, then Apply.` : `Improved draft: ${sections.length} sections / ${nq} questions. Review, then Apply.`, 'ok');
+    toast(mode === 'convert' ? 'Questionnaire converted — please verify against the original' : 'Improved questionnaire ready for review', 'ok');
+    $('#designerBody').scrollIntoView({ behavior: 'smooth' });
+  }
+  async function aiConvert() {
+    if (!pages.length) return toast('Upload the questionnaire pages first');
     if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
-    const st = $('#designerStatus'); const btn = $('#designerAiBtn'); btn.disabled = true;
-    setStatus(st, `Reading ${pages.length} page(s) with AI and drafting the questionnaire…`, '', true);
-    try {
-      let out;
-      if (activeEngine() === 'gemini') {
-        const body = { contents: [{ role: 'user', parts: [{ text: AI_PROMPT() }, ...pages.map(p => ({ inline_data: { mime_type: 'image/jpeg', data: p.dataUrl.split(',')[1] } }))] }], generationConfig: { responseMimeType: 'application/json', responseSchema: AI_SCHEMA, temperature: 0.2 } };
-        let d = await geminiCall(settings.model, body);
-        if (d.error) d = await geminiCall(settings.model, { ...body, generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } });
-        if (d.error) d = await geminiCall(GEMINI_FALLBACK, body);
-        if (d.error) throw new Error(d.error.message);
-        out = extractJson(d.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || '');
-      } else if (activeEngine() === 'openrouter') {
-        const content = [{ type: 'text', text: AI_PROMPT() }, ...pages.map(p => ({ type: 'image_url', image_url: { url: p.dataUrl } }))];
-        const r = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.orKey}`, 'HTTP-Referer': location.origin, 'X-Title': 'GeoSurvey' }, body: JSON.stringify({ model: settings.orModel, messages: [{ role: 'user', content }], temperature: 0.2, max_tokens: 6000, response_format: { type: 'json_object' } }) });
-        const d = await r.json(); if (d.error) throw new Error(d.error.message);
-        const c = d.choices?.[0]?.message?.content; out = extractJson(typeof c === 'string' ? c : (c || []).map(t => t.text || '').join(''));
-      } else throw new Error('Questionnaire drafting needs Gemini or OpenRouter');
-      if (!Array.isArray(out.sections) || !out.sections.length) throw new Error('AI returned no sections');
-      const taken = new Set(LOCATION_FIELDS.map(f => f.k));
-      draft = { ...draft, sections: out.sections.map((s, i) => ({ id: slug(s.title || `section_${i + 1}`), title: s.title || `Section ${i + 1}`, photoHint: s.photoHint || undefined, fields: (s.fields || []).map(f => { const t = FIELD_TYPES.includes(f.type) ? f.type : 'text'; const q = { k: uniqueKey(slug(f.key || f.label), taken), label: f.label || '', type: t, required: !!f.required }; if (f.help) q.help = f.help; if (t === 'select' || t === 'multi') q.options = (f.options || []).filter(Boolean); if (t === 'likert') q.c = String(f.construct || 'C1').toUpperCase().slice(0, 4); else q.ai = true; return q; }) })) };
-      active = null; persist(); render();
-      setStatus(st, `AI drafted ${draft.sections.length} sections / ${draft.sections.reduce((n, s) => n + s.fields.length, 0)} questions from the document. Review, edit, then Approve & apply.`, 'ok');
-      toast('Draft questionnaire ready for review', 'ok'); $('#designerBody').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { setStatus(st, 'AI error: ' + e.message, 'err'); toast('AI error: ' + e.message, 'err'); }
-    finally { btn.disabled = !pages.length; }
+    const st = $('#designerStatus'); $('#designerAiBtn').disabled = true;
+    setStatus(st, `Transcribing ${pages.length} page(s) exactly as printed…`, '', true);
+    try { adoptAI(await askAI(CONVERT_PROMPT(), pages, 0), 'convert'); }
+    catch (e) { setStatus(st, 'AI error: ' + e.message, 'err'); toast('AI error: ' + e.message, 'err'); }
+    finally { $('#designerAiBtn').disabled = !pages.length; }
+  }
+  async function aiImprove() {
+    if (!draft.sections.length) return toast('Nothing to improve yet — design, load or convert a questionnaire first');
+    if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
+    const instr = prompt('Optional instructions for the AI (e.g. "add questions on migration and debt", "shorten the wording", "make all scales 1–7"). Leave empty for a general improvement.', '');
+    if (instr === null) return;
+    const st = $('#designerStatus'); $('#designerImproveBtn').disabled = true;
+    setStatus(st, 'Improving the questionnaire with AI…', '', true);
+    try { adoptAI(await askAI(IMPROVE_PROMPT(instr.trim()), [], 0.3), 'improve'); }
+    catch (e) { setStatus(st, 'AI error: ' + e.message, 'err'); toast('AI error: ' + e.message, 'err'); }
+    finally { $('#designerImproveBtn').disabled = false; }
   }
 
   function open() { if (!draft) load(); }
@@ -307,16 +343,18 @@ ${JSON.stringify({ sections: draft.sections.map(s => ({ title: s.title, fields: 
     body.addEventListener('keydown', e => { if (e.key === 'Escape') { active = null; render(); } });
     $('#designerModel').addEventListener('input', onInput);
     $('#designerFile').onchange = e => { intake([...e.target.files]); e.target.value = ''; };
-    $('#designerAiBtn').onclick = aiDraft;
+    $('#designerAiBtn').onclick = aiConvert;
+    $('#designerImproveBtn').onclick = aiImprove;
     $('#designerAddQ').onclick = addQuestion;
     $('#designerAddSec').onclick = addSection;
     $('#designerApply').onclick = () => approve(false);
     $('#designerPublish').onclick = () => approve(true);
-    $('#designerReset').onclick = reset;
+    $('#designerReset').onclick = () => startBlank(true);
+    $('#designerSample').onclick = loadSample;
     $('#designerExport').onclick = exportJson;
     $('#designerImport').onchange = e => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; };
     $('#designerDiscard').onclick = discard;
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { open, load, approve };
+  return { open, load, approve, startBlank, loadSample, aiConvert, aiImprove };
 })();

@@ -52,7 +52,7 @@ const PdfExport = (() => {
       setFont('bold', 10.5, C.ink); doc.text(clean(text), M + 12, y + 0.8);
       y += 8;
     };
-    const valueOf = f => { const v = rec[f.k]; if (v === '' || v == null) return '-'; if (f.type === 'likert') return `${v} - ${LIKERT[+v - 1] || ''}`; return clean(String(v)).replace(/;\s*/g, ', '); };
+    const valueOf = f => { const v = rec[f.k]; if (v === '' || v == null) return '-'; if (f.type === 'likert') return `${v} - ${scaleOf(f).labels[+v - 1] || ''}`; return clean(String(v)).replace(/;\s*/g, ', '); };
     // two-column key/value grid with wrapping
     const kvGrid = (fields, cols = 2) => {
       const gap = 6, cw = (CW - gap * (cols - 1)) / cols;
@@ -93,11 +93,14 @@ const PdfExport = (() => {
     SECTIONS.forEach((s, i) => {
       const num = String(i + 2).padStart(2, '0');
       if (s.fields.every(f => f.type === 'likert')) {
-        sectionTitle(num, 'Perceptions (1 = strongly disagree, 5 = strongly agree)');
-        const colW = 9, tblW = CW, stmtW = tblW - 5 * colW - 4;
+        const NMAX = Math.max(...s.fields.map(f => scaleOf(f).max));
+        const sc0 = scaleOf(s.fields[0]);
+        sectionTitle(num, `${s.title} (1 = ${sc0.lo}, ${sc0.max} = ${sc0.hi})`);
+        const colW = NMAX > 7 ? 7 : 9, tblW = CW, stmtW = tblW - NMAX * colW - 4;
+        const range = Array.from({ length: NMAX }, (_, i) => i + 1);
         const likertHead = () => {
           setFont('bold', 7.5, C.blue); doc.text('Statement', M + 1, y);
-          [1, 2, 3, 4, 5].forEach((n, j) => doc.text(String(n), M + stmtW + 4 + j * colW + colW / 2, y, { align: 'center' }));
+          range.forEach((n, j) => doc.text(String(n), M + stmtW + 4 + j * colW + colW / 2, y, { align: 'center' }));
           doc.setDrawColor(...C.line); doc.line(M, y + 1.5, M + tblW, y + 1.5); y += 5;
         };
         ensure(9); likertHead(); onNewPage = likertHead;
@@ -106,8 +109,8 @@ const PdfExport = (() => {
           ensure(h);
           if (idx % 2 === 0) { doc.setFillColor(250, 250, 253); doc.rect(M, y - 4, tblW, h, 'F'); }
           doc.text(lines, M + 1, y);
-          const v = +rec[f.k];
-          [1, 2, 3, 4, 5].forEach((n, j) => { const cx = M + stmtW + 4 + j * colW + colW / 2, cy = y - 1.2; doc.setDrawColor(...C.line); doc.setLineWidth(0.3); if (v === n) { doc.setFillColor(...C.blue); doc.circle(cx, cy, 1.9, 'F'); } else doc.circle(cx, cy, 1.9, 'S'); });
+          const v = +rec[f.k], fm = scaleOf(f).max;
+          range.forEach((n, j) => { if (n > fm) return; const cx = M + stmtW + 4 + j * colW + colW / 2, cy = y - 1.2; doc.setDrawColor(...C.line); doc.setLineWidth(0.3); if (v === n) { doc.setFillColor(...C.blue); doc.circle(cx, cy, 1.9, 'F'); } else doc.circle(cx, cy, 1.9, 'S'); });
           y += h;
         });
         onNewPage = null; y += 2;
@@ -158,7 +161,7 @@ const PdfExport = (() => {
 
   /* Fallback: styled print view (browser "Save as PDF") when the library cannot load. */
   function printFallback(rec, ref) {
-    const v = f => { const x = rec[f.k]; return x === '' || x == null ? '—' : f.type === 'likert' ? `${x} – ${LIKERT[+x - 1] || ''}` : esc(String(x).replace(/;\s*/g, ', ')); };
+    const v = f => { const x = rec[f.k]; return x === '' || x == null ? '—' : f.type === 'likert' ? `${x} – ${scaleOf(f).labels[+x - 1] || ''}` : esc(String(x).replace(/;\s*/g, ', ')); };
     const sec = (num, title, fields) => `<h2><span>${num}</span>${esc(title)}</h2><div class="g">${fields.map(f => `<div><small>${esc(f.label)}</small><b>${v(f)}</b></div>`).join('')}</div>`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(ref)}</title><style>
 @page{size:A4;margin:15mm} body{font:10.5pt/1.4 Nunito,system-ui,sans-serif;color:#0b0e13;margin:0}
@@ -172,7 +175,7 @@ table{width:100%;border-collapse:collapse;font-size:9.5pt} td,th{padding:3px 4px
 <h1>Socio-Economic Household Survey</h1><div class="sub">GeoSurvey · Ref ${esc(ref)} · ${esc(rec.survey_date || '')} · ${esc(rec.surveyor || '')}</div>
 ${sec('01', 'Location & enumerator', LOCATION_FIELDS)}
 ${SECTIONS.map((s, i) => s.fields.every(f => f.type === 'likert')
-  ? `<h2><span>${String(i + 2).padStart(2, '0')}</span>Perceptions (1 = strongly disagree, 5 = strongly agree)</h2><table><tr><th style="text-align:left">Statement</th>${[1, 2, 3, 4, 5].map(n => `<th>${n}</th>`).join('')}</tr>${s.fields.map(f => `<tr><td>${esc(f.label)}</td>${[1, 2, 3, 4, 5].map(n => `<td>${+rec[f.k] === n ? '<span class="on">●</span>' : '○'}</td>`).join('')}</tr>`).join('')}</table>`
+  ? `<h2><span>${String(i + 2).padStart(2, '0')}</span>${esc(s.title)}</h2><table><tr><th style="text-align:left">Statement</th>${Array.from({ length: Math.max(...s.fields.map(f => scaleOf(f).max)) }, (_, n) => `<th>${n + 1}</th>`).join('')}</tr>${s.fields.map(f => `<tr><td>${esc(f.label)}</td>${Array.from({ length: scaleOf(f).max }, (_, n) => `<td>${+rec[f.k] === n + 1 ? '<span class="on">●</span>' : '○'}</td>`).join('')}</tr>`).join('')}</table>`
   : sec(String(i + 2).padStart(2, '0'), s.title, s.fields)).join('')}
 ${sec(String(SECTIONS.length + 2).padStart(2, '0'), 'Remarks', REMARKS_FIELDS)}
 ${photos.length ? `<h2><span>${String(SECTIONS.length + 3).padStart(2, '0')}</span>Photographs (${photos.length})</h2><div class="ph">${photos.map(p => `<figure><img src="${p.dataUrl}"><figcaption>${esc(new Date(p.taken_at).toLocaleString())}${p.lat != null ? ` · ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}` : ''}</figcaption></figure>`).join('')}</div>` : ''}

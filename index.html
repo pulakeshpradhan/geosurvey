@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.7.0">
+  <link rel="stylesheet" href="styles.css?v=1.8.0">
 </head>
 <body>
   <header class="topbar">
@@ -42,6 +42,15 @@
   <main>
     <!-- ================= SURVEY VIEW ================= -->
     <section id="formView" class="view">
+      <div class="card onboarding" id="onboarding" hidden>
+        <h2>Start your questionnaire</h2>
+        <p class="sub">There are no questions yet. Choose how you want to begin — you can change everything later in Edit.</p>
+        <div class="ob-grid">
+          <button class="ob-tile" id="obDesign"><span class="ob-ic">✎</span><b>Design your own</b><span>Build sections and questions in a form-style editor.</span></button>
+          <button class="ob-tile" id="obSample"><span class="ob-ic">▤</span><b>Use sample questionnaire</b><span>Socio-economic household survey with 5 perception constructs, ready for SEM.</span></button>
+          <button class="ob-tile" id="obUpload"><span class="ob-ic">⇪</span><b>Upload paper questionnaire</b><span>PDF or photos — converted exactly as printed; improve with AI afterwards if you wish.</span></button>
+        </div>
+      </div>
 
       <!-- Photos & AI -->
       <div class="card" id="photoCard">
@@ -60,7 +69,7 @@
       </div>
 
       <!-- Location -->
-      <div class="card">
+      <div class="card" id="locationCard">
         <div class="card-head">
           <div><span class="step">01</span><h2>Location</h2></div>
           <button id="locateBtn" class="btn btn-primary btn-sm">Detect location</button>
@@ -72,7 +81,7 @@
 
       <div id="sections"></div>
 
-      <div class="card">
+      <div class="card" id="remarksCard">
         <div class="card-head"><div><span class="step" id="remarksStep"></span><h2>Remarks</h2></div></div>
         <div class="grid" id="remarksFields"></div>
       </div>
@@ -123,36 +132,33 @@
 
     <!-- ================= EDIT VIEW: questionnaire designer + collected data ================= -->
     <section id="editView" class="view" hidden>
-      <div class="gform">
-        <div class="gform-main">
-          <div class="card gform-intro">
-            <div class="card-head">
-              <div><h2>Questionnaire designer</h2><p class="sub">Click a question to edit it. Drag ⋮⋮ to reorder. Use the toolbar to add questions or sections, or upload your paper questionnaire and let the AI draft it. Nothing changes until you approve.</p></div>
-              <div class="btn-row">
-                <label class="btn btn-outline btn-sm">Upload paper questionnaire (PDF / photos)<input type="file" id="designerFile" accept="application/pdf,image/*" multiple hidden></label>
-                <button id="designerAiBtn" class="btn btn-primary btn-sm" disabled>AI: draft questionnaire</button>
-              </div>
-            </div>
-            <div id="designerIntake" hidden><div id="designerPages" class="thumb-strip"></div></div>
-            <div id="designerStatus" class="status"></div>
-            <div id="designerModel" class="an-note"></div>
-          </div>
-          <div id="designerBody"></div>
-        </div>
-        <div class="gform-tools">
-          <button id="designerAddQ" class="gtool" title="Add question">⊕</button>
-          <button id="designerAddSec" class="gtool" title="Add section">▤</button>
-          <label class="gtool" title="Import questionnaire (JSON)">⤓<input type="file" id="designerImport" accept="application/json" hidden></label>
-          <button id="designerExport" class="gtool" title="Export questionnaire (JSON)">⤒</button>
-          <button id="designerReset" class="gtool" title="Load the default questionnaire">↺</button>
+      <div class="gtop">
+        <div class="gtop-left"><span class="gtop-title">Questionnaire</span><span id="designerDirty" class="pill pending" hidden>unsaved</span><span id="designerStatus" class="status"></span></div>
+        <div class="gtop-right">
+          <label class="gbtn" title="Upload a paper questionnaire (PDF or photos)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>Upload<input type="file" id="designerFile" accept="application/pdf,image/*" multiple hidden></label>
+          <button id="designerAiBtn" class="gbtn primary" disabled title="Transcribe the uploaded pages into a questionnaire exactly as printed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>Convert</button>
+          <button id="designerImproveBtn" class="gbtn" title="Improve the current questionnaire with AI (optionally with your instructions)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Improve with AI</button>
+          <span class="gsep"></span>
+          <button id="designerSample" class="gbtn" title="Load the sample questionnaire">Sample</button>
+          <button id="designerReset" class="gbtn" title="Start from a blank questionnaire">Blank</button>
+          <label class="gbtn" title="Import questionnaire JSON">Import<input type="file" id="designerImport" accept="application/json" hidden></label>
+          <button id="designerExport" class="gbtn" title="Export questionnaire JSON">Export</button>
         </div>
       </div>
-      <div class="card approve-bar">
-        <div><b>Final approval</b> <span id="designerDirty" class="pill pending" hidden>unsaved changes</span><p class="sub approve-hint">Apply = this device · Publish = every enumerator’s device (via backend)</p></div>
+      <div id="designerIntake" hidden><div id="designerPages" class="thumb-strip"></div></div>
+      <div class="gform">
+        <div class="gform-main"><div id="designerBody"></div><div id="designerModel" class="an-note gmodel"></div></div>
+        <div class="gform-tools">
+          <button id="designerAddQ" class="gtool" title="Add question"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button>
+          <button id="designerAddSec" class="gtool" title="Add section"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/></svg></button>
+        </div>
+      </div>
+      <div class="approve-bar">
+        <div><b>Approve</b> <span class="approve-hint">apply on this device, or publish so every enumerator’s device adopts it</span></div>
         <div class="btn-row">
           <button id="designerDiscard" class="btn btn-ghost btn-sm">Discard</button>
-          <button id="designerApply" class="btn btn-outline btn-sm">Approve &amp; apply</button>
-          <button id="designerPublish" class="btn btn-primary btn-sm">Approve &amp; publish</button>
+          <button id="designerApply" class="btn btn-outline btn-sm">Apply</button>
+          <button id="designerPublish" class="btn btn-primary btn-sm">Publish to team</button>
         </div>
       </div>
 
@@ -285,11 +291,11 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=1.7.0"></script>
-  <script src="sav.js?v=1.7.0"></script>
-  <script src="exports.js?v=1.7.0"></script>
-  <script src="analysis.js?v=1.7.0"></script>
-  <script src="pdf.js?v=1.7.0"></script>
-  <script src="designer.js?v=1.7.0"></script>
+  <script src="app.js?v=1.8.0"></script>
+  <script src="sav.js?v=1.8.0"></script>
+  <script src="exports.js?v=1.8.0"></script>
+  <script src="analysis.js?v=1.8.0"></script>
+  <script src="pdf.js?v=1.8.0"></script>
+  <script src="designer.js?v=1.8.0"></script>
 </body>
 </html>
