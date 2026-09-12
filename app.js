@@ -5,15 +5,19 @@
  */
 'use strict';
 
-const APP_VERSION = '1.5.5';
+const APP_VERSION = '1.6.0';
 const MAX_PHOTOS = 12;
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('Browser storage is full — export and remove synced records', 'err'); } },
+};
 
 /* ------------------------------------------------------------------ */
 /* Questionnaire schema — edit here to change the survey.               */
 /* ai:true → exposed to the AI for auto-fill; photoHint → per-section   */
 /* guidance shown to the enumerator and sent to the model               */
 /* ------------------------------------------------------------------ */
-const LOCATION_FIELDS = [
+let LOCATION_FIELDS = [
   { k: 'surveyor', label: 'Enumerator name', type: 'text', required: true },
   { k: 'survey_date', label: 'Survey date', type: 'date', ro: true },
   { k: 'latitude', label: 'Latitude', type: 'text', ro: true },
@@ -29,7 +33,7 @@ const LOCATION_FIELDS = [
   { k: 'full_address', label: 'Full address (from map)', type: 'textarea', wide: true, ro: true },
 ];
 
-const SECTIONS = [
+let SECTIONS = [
   {
     id: 'household', title: 'Household head & family',
     photoHint: 'Photograph an ID card, ration card, or the filled paper form to read names, ages, family size and contact number.',
@@ -116,7 +120,7 @@ const SECTIONS = [
 ];
 
 /* Latent constructs measured by 5-point Likert items (used by reliability, EFA/CFA, SEM in the Analysis tab). */
-const CONSTRUCTS = {
+let CONSTRUCTS = {
   ES: { name: 'Economic Security', items: ['es1', 'es2', 'es3', 'es4'] },
   AS: { name: 'Access to Services', items: ['as1', 'as2', 'as3', 'as4'] },
   GS: { name: 'Government Support', items: ['gs1', 'gs2', 'gs3'] },
@@ -125,7 +129,7 @@ const CONSTRUCTS = {
 };
 /* Hypothesised structural model (from → to). ES mediates AS/GS → WB; SC moderates ES → WB;
  * higher-order "Livelihood Capacity" (LC) = ES + AS + SC → WB. */
-const STRUCTURAL_MODEL = {
+let STRUCTURAL_MODEL = {
   paths: [['AS', 'ES'], ['GS', 'ES'], ['ES', 'WB'], ['AS', 'WB'], ['SC', 'WB'], ['GS', 'WB']],
   mediations: [['AS', 'ES', 'WB'], ['GS', 'ES', 'WB']],
   moderation: { predictor: 'ES', moderator: 'SC', outcome: 'WB' },
@@ -156,14 +160,55 @@ SECTIONS.push({
   ],
 });
 
-const REMARKS_FIELDS = [
+let REMARKS_FIELDS = [
   { k: 'ai_observations', label: 'AI observations (from photos)', type: 'textarea', wide: true, ai: true },
   { k: 'remarks', label: 'Enumerator remarks', type: 'textarea', wide: true },
 ];
 
-const ALL_FIELDS = [...LOCATION_FIELDS, ...SECTIONS.flatMap(s => s.fields), ...REMARKS_FIELDS];
-const AI_FIELDS = ALL_FIELDS.filter(f => f.ai);
-const SECTION_BY_ID = Object.fromEntries(SECTIONS.map(s => [s.id, s]));
+let ALL_FIELDS, AI_FIELDS, SECTION_BY_ID;
+const FIELD_TYPES = ['text', 'number', 'date', 'tel', 'select', 'multi', 'likert', 'textarea'];
+const clone = o => JSON.parse(JSON.stringify(o));
+const DEFAULT_SCHEMA = clone({ version: 1, sections: SECTIONS, remarks: REMARKS_FIELDS, constructNames: Object.fromEntries(Object.entries(CONSTRUCTS).map(([k, c]) => [k, c.name])), model: STRUCTURAL_MODEL });
+const DEFAULT_CONSTRUCT_KEYS = Object.keys(CONSTRUCTS).join(',');
+
+/** Constructs are derived from Likert fields tagged with a construct code (f.c). */
+function deriveConstructs(sections, names = {}) {
+  const out = {};
+  sections.flatMap(s => s.fields).forEach(f => { if (f.type === 'likert' && f.c) { const c = String(f.c).toUpperCase(); (out[c] = out[c] || { name: names[c] || DEFAULT_SCHEMA.constructNames[c] || c, items: [] }).items.push(f.k); } });
+  Object.keys(out).forEach(c => { if (out[c].items.length < 2) delete out[c]; }); // a construct needs ≥ 2 items
+  return out;
+}
+/** Structural model: the designed default when its constructs exist, a stored valid model, otherwise "all → last". */
+function deriveModel(constructs, stored) {
+  const keys = Object.keys(constructs);
+  if (keys.join(',') === DEFAULT_CONSTRUCT_KEYS) return clone(DEFAULT_SCHEMA.model);
+  const valid = m => m && Array.isArray(m.paths) && m.paths.every(([a, b]) => keys.includes(a) && keys.includes(b));
+  if (valid(stored)) return { paths: stored.paths, mediations: (stored.mediations || []).filter(t => t.every(k => keys.includes(k))), moderation: stored.moderation && [stored.moderation.predictor, stored.moderation.moderator, stored.moderation.outcome].every(k => keys.includes(k)) ? stored.moderation : null, higherOrder: stored.higherOrder && stored.higherOrder.lower.every(k => keys.includes(k)) && keys.includes(stored.higherOrder.outcome) ? stored.higherOrder : null };
+  if (keys.length < 2) return { paths: [], mediations: [], moderation: null, higherOrder: null };
+  const outcome = keys[keys.length - 1];
+  return { paths: keys.filter(k => k !== outcome).map(k => [k, outcome]), mediations: [], moderation: null, higherOrder: null };
+}
+let formListenersBound = false;
+/** Install a questionnaire schema (default or designed in the Edit tab) and re-render the form. */
+function applySchema(schema, rerender = true) {
+  const s = schema || DEFAULT_SCHEMA;
+  SECTIONS = clone(s.sections);
+  REMARKS_FIELDS = clone(s.remarks || DEFAULT_SCHEMA.remarks);
+  CONSTRUCTS = deriveConstructs(SECTIONS, s.constructNames || {});
+  STRUCTURAL_MODEL = deriveModel(CONSTRUCTS, s.model);
+  ALL_FIELDS = [...LOCATION_FIELDS, ...SECTIONS.flatMap(x => x.fields), ...REMARKS_FIELDS];
+  AI_FIELDS = ALL_FIELDS.filter(f => f.ai);
+  SECTION_BY_ID = Object.fromEntries(SECTIONS.map(x => [x.id, x]));
+  if (rerender) {
+    const keep = collect();
+    renderForm();
+    Object.entries(keep).forEach(([k, v]) => setValue(k, v));
+    renderThumbs(); updateProgress();
+    if (typeof Analysis !== 'undefined') Analysis.schedule();
+  }
+}
+function currentSchema() { return { version: (LS.get('gs_schema', null) || {}).version || 1, sections: clone(SECTIONS), remarks: clone(REMARKS_FIELDS), constructNames: Object.fromEntries(Object.entries(CONSTRUCTS).map(([k, c]) => [k, c.name])), model: clone(STRUCTURAL_MODEL) }; }
+applySchema(LS.get('gs_schema', null), false);
 // Columns that exist on a record but are not questionnaire fields (used by exports)
 const META_FIELDS = [
   { k: 'id', label: 'Record ID', type: 'text' }, { k: 'submitted_at', label: 'Submitted at', type: 'text' },
@@ -174,10 +219,6 @@ const META_FIELDS = [
 /* ------------------------------------------------------------------ */
 /* Storage: settings + records in localStorage, photos in IndexedDB     */
 /* ------------------------------------------------------------------ */
-const LS = {
-  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('Browser storage is full — export and remove synced records', 'err'); } },
-};
 const DEFAULT_SETTINGS = { engine: 'auto', geminiKey: '', model: 'gemini-3.5-flash-lite', orKey: '', orModel: 'google/gemini-2.5-flash-lite', endpoint: '', surveyor: '', maxDim: 1024, stamp: true, uploadPhotos: true, sampleTools: false };
 let settings = Object.assign({}, DEFAULT_SETTINGS, LS.get('gs_settings', {}));
 
@@ -282,11 +323,14 @@ function renderForm() {
     await addFiles(files, sec);
   }));
   $$('button[data-ai]').forEach(b => b.addEventListener('click', () => analyzePhotos(b.dataset.ai)));
-  $('#formView').addEventListener('input', e => {
-    const fld = e.target.closest('.field');
-    if (fld) fld.classList.remove('ai', 'invalid');
-    scheduleDraftSave(); updateProgress();
-  });
+  if (!formListenersBound) {
+    formListenersBound = true;
+    $('#formView').addEventListener('input', e => {
+      const fld = e.target.closest('.field');
+      if (fld) fld.classList.remove('ai', 'invalid');
+      scheduleDraftSave(); updateProgress();
+    });
+  }
 }
 
 function getValue(k) {
@@ -700,7 +744,7 @@ async function analyzePhotos(section = '', list = null) {
 /* Submissions: local queue + Apps Script (Sheets + Drive) sync          */
 /* ------------------------------------------------------------------ */
 function getRecords() { return LS.get('gs_records', []); }
-function saveRecords(r) { LS.set('gs_records', r); updatePendingBadge(); if (window.Analysis) Analysis.schedule(); }
+function saveRecords(r) { LS.set('gs_records', r); updatePendingBadge(); if (typeof Analysis !== 'undefined') Analysis.schedule(); }
 function updatePendingBadge() {
   const n = getRecords().filter(r => r.status !== 'synced').length;
   const b = $('#pendingBadge'); b.textContent = n; b.hidden = n === 0;
@@ -794,6 +838,7 @@ async function adminPost(payload) {
   const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Request failed');
   return j;
 }
+async function publishSchema(schema) { return adminPost({ action: 'setSchema', schema }); }
 async function adminConnect() {
   const st = $('#adminStatus');
   sessionStorage.setItem('gs_admin', $('#adminToken').value.trim());
@@ -805,7 +850,7 @@ async function adminLoad() {
   const j = await adminFetch({ action: 'list', limit: 5000 });
   adminRows = j.rows || [];
   const link = $('#adminSheetLink'); if (j.sheetUrl) { link.href = j.sheetUrl; link.hidden = false; }
-  renderAdmin(); if (window.Analysis) Analysis.schedule();
+  renderAdmin(); if (typeof Analysis !== 'undefined') Analysis.schedule();
 }
 function renderAdmin() {
   const q = $('#adminSearch').value.trim().toLowerCase();
@@ -861,7 +906,7 @@ function saveSettings(quiet = false) {
   LS.set('gs_settings', settings);
   if (!getValue('surveyor') && settings.surveyor) setValue('surveyor', settings.surveyor);
   updateEngineChip(); toast('Settings saved', 'ok');
-  if (window.Analysis) Analysis.schedule();
+  if (typeof Analysis !== 'undefined') Analysis.schedule();
 }
 
 /* ------------------------------------------------------------------ */
@@ -872,9 +917,10 @@ function showView(id) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === id));
   $('#actionBar').hidden = id !== 'formView';
   $('#pdfBtn').hidden = id !== 'formView';
+  $('#editBtn').classList.toggle('active', id === 'editView');
   if (id === 'responsesView') renderLocalTable();
-  if (id === 'analysisView' && window.Analysis) Analysis.open();
-  if (id === 'adminView' && adminToken() && $('#adminPanel').hidden) adminConnect();
+  if (id === 'analysisView' && typeof Analysis !== 'undefined') Analysis.open();
+  if (id === 'editView') { if (typeof Designer !== 'undefined') Designer.open(); if (adminToken() && $('#adminPanel').hidden) adminConnect(); }
 }
 function init() {
   renderForm();
@@ -883,6 +929,11 @@ function init() {
   restoreDraft(); updateProgress(); updatePendingBadge(); updateEngineChip(); detectChromeAI();
 
   $$('.tab').forEach(t => t.onclick = () => showView(t.dataset.view));
+  $('#editBtn').onclick = () => showView('editView');
+  // Team questionnaire: adopt a newer schema published through the backend
+  if (settings.endpoint && navigator.onLine) fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=schema').then(r => r.json()).then(j => {
+    if (j.ok && j.schema && j.schema.version > (LS.get('gs_schema', { version: 0 }).version || 0)) { LS.set('gs_schema', j.schema); applySchema(j.schema); toast('Questionnaire updated to the team version', 'ok'); }
+  }).catch(() => {});
   $('#settingsBtn').onclick = openSettings;
   $('#setModel').onchange = e => { $('#setModelCustom').hidden = e.target.value !== 'custom'; };
   $('#testAiBtn').onclick = async e => {

@@ -21,6 +21,24 @@ var ADMIN_TOKEN = 'change-me-to-a-long-secret';   // <-- REQUIRED for the Admin 
 var SHEET_NAME = 'Responses';
 var PHOTO_FOLDER = 'GeoSurvey Photos';
 var SHEET_ID = ''; // Optional: spreadsheet ID if this script is NOT bound to the sheet.
+var CONFIG_SHEET = 'Config';   // stores the published questionnaire (key/value)
+
+function configSheet_() {
+  var ss = ss_(); var sh = ss.getSheetByName(CONFIG_SHEET);
+  if (!sh) { sh = ss.insertSheet(CONFIG_SHEET); sh.appendRow(['key', 'value', 'updated_at']); }
+  return sh;
+}
+function getConfig_(key) {
+  var sh = configSheet_(); var n = sh.getLastRow(); if (n < 2) return null;
+  var rows = sh.getRange(2, 1, n - 1, 2).getValues();
+  for (var i = 0; i < rows.length; i++) if (rows[i][0] === key) return rows[i][1];
+  return null;
+}
+function setConfig_(key, value) {
+  var sh = configSheet_(); var n = sh.getLastRow(); var rows = n < 2 ? [] : sh.getRange(2, 1, n - 1, 1).getValues();
+  for (var i = 0; i < rows.length; i++) if (rows[i][0] === key) { sh.getRange(i + 2, 2, 1, 2).setValues([[value, new Date().toISOString()]]); return; }
+  sh.appendRow([key, value, new Date().toISOString()]);
+}
 
 function ss_() { return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet(); }
 function getSheet_() {
@@ -95,10 +113,11 @@ function doPost(e) {
   }
 }
 
-/** GET: ?action=list&token=…&limit=N (admin) · no token → only the total count. */
+/** GET: ?action=list&token=…&limit=N (admin) · ?action=schema (public: published questionnaire) · else total count. */
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
+    if (p.action === 'schema') { var js = getConfig_('schema'); return json_({ ok: true, schema: js ? JSON.parse(js) : null }); }
     var sh = getSheet_();
     var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
     if (p.action === 'list') {
@@ -132,6 +151,11 @@ function adminAction_(data) {
       if (String(ids[i][0]) === String(data.id)) { sh.deleteRow(i + 2); return json_({ ok: true, deleted: data.id }); }
     }
     return json_({ ok: false, error: 'Not found' });
+  }
+  if (data.action === 'setSchema') {
+    if (!data.schema || !data.schema.sections) return json_({ ok: false, error: 'No schema' });
+    setConfig_('schema', JSON.stringify(data.schema));
+    return json_({ ok: true, version: data.schema.version });
   }
   return json_({ ok: false, error: 'Unknown action' });
 }

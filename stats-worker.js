@@ -303,6 +303,9 @@ function run({ records, schema }) {
   if (N < 5) { res.warnings.push('Need at least 5 records.'); return res; }
   const code = (k, r) => { const f = fieldBy[k]; if (!f || !f.options) return NaN; const i = f.options.findIndex(o => o.toLowerCase() === String(r[k] ?? '').trim().toLowerCase()); return i < 0 ? NaN : i + 1; };
   const itemKeys = Object.values(constructs).flatMap(c => c.items);
+  const ckeys = Object.keys(constructs);
+  const OUT = ckeys.find(k => model.paths.some(p => p[1] === k) && !model.paths.some(p => p[0] === k)) || ckeys[ckeys.length - 1] || null; // outcome construct
+  const PRED = ckeys.find(k => k !== OUT) || null;
   // derived variables per record
   const rows = records.map(r => {
     const d = { ...r };
@@ -317,7 +320,7 @@ function run({ records, schema }) {
 
   /* Sample size */
   const e95 = Z95 * Math.sqrt(0.25 / N);
-  res.sample = { N, cochran: Math.ceil(Z95 ** 2 * 0.25 / 0.05 ** 2), marginError: e95, maxArrows: Math.max(...Object.keys(constructs).map(k => model.paths.filter(p => p[1] === k).length)), completeLikert: rows.filter(r => itemKeys.every(k => Number.isFinite(r[k]))).length };
+  res.sample = { N, cochran: Math.ceil(Z95 ** 2 * 0.25 / 0.05 ** 2), marginError: e95, maxArrows: Math.max(1, ...ckeys.map(k => model.paths.filter(p => p[1] === k).length)), completeLikert: rows.filter(r => itemKeys.every(k => Number.isFinite(r[k]))).length };
   res.sample.semRule10 = res.sample.maxArrows * 10;
 
   /* Descriptives */
@@ -331,19 +334,23 @@ function run({ records, schema }) {
   const val = (k, r) => r[k];
   const numRows = k => rows.filter(r => Number.isFinite(r[k]));
   res.tests = {};
-  const male = rows.filter(r => r.head_gender === 'Male' && Number.isFinite(r.WB)).map(r => r.WB), female = rows.filter(r => r.head_gender === 'Female' && Number.isFinite(r.WB)).map(r => r.WB);
+  res.outcome = OUT; res.predictor = PRED;
+  const male = OUT ? rows.filter(r => r.head_gender === 'Male' && Number.isFinite(r[OUT])).map(r => r[OUT]) : [], female = OUT ? rows.filter(r => r.head_gender === 'Female' && Number.isFinite(r[OUT])).map(r => r[OUT]) : [];
   res.tests.tGender = welch(male, female);
   const grp = (by, dv) => { const g = {}; rows.forEach(r => { if (r[by] && Number.isFinite(r[dv])) (g[r[by]] = g[r[by]] || []).push(r[dv]); }); const order = fieldBy[by]?.options || Object.keys(g); return anova(order.filter(o => g[o]).map(o => ({ name: o, values: g[o] }))); };
-  res.tests.anovaHouse = grp('house_type', 'WB'); res.tests.anovaIncome = grp('monthly_income', 'ES'); res.tests.anovaEdu = grp('education', 'ES');
+  res.tests.anovaHouse = OUT ? grp('house_type', OUT) : null; res.tests.anovaIncome = PRED ? grp('monthly_income', PRED) : null; res.tests.anovaEdu = PRED ? grp('education', PRED) : null;
   res.tests.chi = [['house_type', 'toilet'], ['monthly_income', 'ration_card'], ['house_type', 'electricity'], ['head_gender', 'occupation']].map(([a, b]) => ({ a, b, la: fieldBy[a]?.label, lb: fieldBy[b]?.label, ...chiSquare(rows.map(r => String(r[a] || '')), rows.map(r => String(r[b] || ''))) })).filter(c => c.chi2 != null);
-  const corrKeys = [...Object.keys(constructs), 'asset_count', 'amenity_index', 'income_code', 'household_size', 'head_age', 'education_code'];
+  const corrKeys = [...ckeys, 'asset_count', 'amenity_index', 'income_code', 'household_size', 'head_age', 'education_code'].filter(k => fieldBy[k] || ckeys.includes(k) || ['asset_count', 'amenity_index', 'income_code', 'education_code'].includes(k));
   const cRows = rows.filter(r => corrKeys.every(k => Number.isFinite(r[k])));
   if (cRows.length > 5) { const cols = corrKeys.map(k => cRows.map(r => r[k])); const R = corrMatrix(cols); res.correlation = { keys: corrKeys, labels: corrKeys.map(k => constructs[k]?.name || numVars.find(v => v[0] === k)?.[1] || k), R: R.map(r => [...r]), P: R.map(r => r.map(v => pCorr(v, cRows.length))), n: cRows.length }; }
-  const regKeys = ['ES', 'AS', 'GS', 'SC', 'asset_count', 'income_code'].filter(k => k in constructs || true);
-  const rRows = rows.filter(r => [...regKeys, 'WB'].every(k => Number.isFinite(r[k])));
-  if (rRows.length > regKeys.length + 5) res.regression = { dv: 'WB', names: regKeys.map(k => constructs[k]?.name || k), ...ols(regKeys.map(k => rRows.map(r => r[k])), rRows.map(r => r.WB), regKeys.map(k => constructs[k]?.name || k)) };
+  if (OUT) {
+    const regKeys = [...ckeys.filter(k => k !== OUT), 'asset_count', 'income_code'];
+    const rRows = rows.filter(r => [...regKeys, OUT].every(k => Number.isFinite(r[k])));
+    if (rRows.length > regKeys.length + 5) res.regression = { dv: OUT, names: regKeys.map(k => constructs[k]?.name || k), ...ols(regKeys.map(k => rRows.map(r => r[k])), rRows.map(r => r[OUT]), regKeys.map(k => constructs[k]?.name || k)) };
+  }
 
   /* Measurement: reliability, EFA, CFA */
+  if (!ckeys.length) { res.warnings.push('The questionnaire has no Likert constructs (≥ 2 items sharing a construct code), so reliability, factor analysis and SEM are skipped.'); return res; }
   const complete = rows.filter(r => itemKeys.every(k => Number.isFinite(r[k])));
   const nC = complete.length; res.nComplete = nC;
   if (nC < itemKeys.length + 5) { res.warnings.push(`Only ${nC} records have all ${itemKeys.length} Likert items — need at least ${itemKeys.length + 5} for factor analysis / SEM.`); return res; }
@@ -361,7 +368,7 @@ function run({ records, schema }) {
     res.fornell = { keys: Object.keys(constructs), corr: res.cfa.latCorr };
     res.htmt = htmt(Xs, Object.fromEntries(Object.entries(constructs).map(([c, d]) => [c, d.items.map(k => idx[k])])));
   } catch (e) { res.warnings.push('CFA failed: ' + e.message); }
-  try { res.sem = fitSEM(S, nC, { ...cfaModel, paths: model.paths }); } catch (e) { res.warnings.push('SEM failed: ' + e.message); }
+  if (model.paths.length) { try { res.sem = fitSEM(S, nC, { ...cfaModel, paths: model.paths }); } catch (e) { res.warnings.push('SEM failed: ' + e.message); } }
 
   /* PLS-SEM + bootstrap: paths, mediation, moderation (two-stage), higher-order (two-stage) */
   const blocks = Object.fromEntries(Object.entries(constructs).map(([c, d]) => [c, d.items.map(k => idx[k])]));
@@ -369,7 +376,7 @@ function run({ records, schema }) {
   function estimateAll(Xcols) {
     const main = pls(Xcols, blocks, model.paths);
     const out = { paths: main.pathCoef, r2: main.r2, f2: main.f2, loadings: main.loadings };
-    out.indirect = Object.fromEntries(model.mediations.map(([a, m, b]) => [`${a}->${m}->${b}`, (main.pathCoef[`${a}->${m}`] || 0) * (main.pathCoef[`${m}->${b}`] || 0)]));
+    out.indirect = Object.fromEntries((model.mediations || []).map(([a, m, b]) => [`${a}->${m}->${b}`, (main.pathCoef[`${a}->${m}`] || 0) * (main.pathCoef[`${m}->${b}`] || 0)]));
     // moderation: two-stage, interaction of standardized LV scores
     if (mod) {
       const predsOf = model.paths.filter(p => p[1] === mod.outcome).map(p => p[0]); const preds = [...new Set([...predsOf, mod.predictor, mod.moderator])];
@@ -389,7 +396,7 @@ function run({ records, schema }) {
     }
     return out;
   }
-  try {
+  if (model.paths.length) try {
     const point = estimateAll(Xs);
     const B = nC >= 300 ? 300 : 200; const boots = []; // bootstrap resamples kept modest for phones
     let seed = 12345; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
@@ -405,7 +412,7 @@ function run({ records, schema }) {
       r2: point.r2,
       loadings: Object.fromEntries(Object.entries(constructs).map(([c, d]) => [c, d.items.map((k, i) => ({ item: k, loading: point.loadings[c][i] }))])),
       validity: Object.fromEntries(Object.keys(constructs).map(c => [c, crAve(point.loadings[c])])),
-      mediation: model.mediations.map(([a, m, b]) => { const ind = summar(o => o.indirect[`${a}->${m}->${b}`]); const dir = summar(o => o.paths[`${a}->${b}`]); const tot = ind.est + dir.est; let type; if (ind.p < 0.05 && dir.p >= 0.05) type = 'Full (indirect-only) mediation'; else if (ind.p < 0.05 && dir.p < 0.05) type = Math.sign(ind.est) === Math.sign(dir.est) ? 'Complementary partial mediation' : 'Competitive partial mediation'; else if (dir.p < 0.05) type = 'Direct-only (no mediation)'; else type = 'No effect'; return { a, m, b, indirect: ind, direct: dir, total: tot, vaf: tot ? ind.est / tot : NaN, type }; }),
+      mediation: (model.mediations || []).map(([a, m, b]) => { const ind = summar(o => o.indirect[`${a}->${m}->${b}`]); const dir = summar(o => o.paths[`${a}->${b}`]); const tot = ind.est + dir.est; let type; if (ind.p < 0.05 && dir.p >= 0.05) type = 'Full (indirect-only) mediation'; else if (ind.p < 0.05 && dir.p < 0.05) type = Math.sign(ind.est) === Math.sign(dir.est) ? 'Complementary partial mediation' : 'Competitive partial mediation'; else if (dir.p < 0.05) type = 'Direct-only (no mediation)'; else type = 'No effect'; return { a, m, b, indirect: ind, direct: dir, total: tot, vaf: tot ? ind.est / tot : NaN, type }; }),
       moderation: point.moderation ? { ...mod, interaction: summar(o => o.moderation?.b), f2: point.moderation.f2, r2: point.moderation.r2, r2Main: point.moderation.r2Main, simple: { low: point.moderation.preds[mod.predictor] - point.moderation.b, high: point.moderation.preds[mod.predictor] + point.moderation.b, mean: point.moderation.preds[mod.predictor] } } : null,
       higher: point.higher ? { ...hoDef, loadings: hoDef.lower.map((l, i) => ({ lower: l, loading: point.higher.loadings[i] })), cr: point.higher.cr, ave: point.higher.ave, r2: point.higher.r2, paths: [[hoDef.key, hoDef.outcome], ...hoDef.covariates.map(c => [c, hoDef.outcome])].map(([a, b]) => ({ from: a, to: b, ...summar(o => o.higher?.paths[`${a}->${b}`]) })) } : null,
     };

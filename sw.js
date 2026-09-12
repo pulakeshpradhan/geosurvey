@@ -1,7 +1,7 @@
 /* GeoSurvey service worker — caches the app shell so the form opens offline.
  * Bump CACHE when deploying changes to index.html / app.js / styles.css. */
-const CACHE = 'geosurvey-v1.5.5';
-const SHELL = ['./', './index.html', './app.js', './exports.js', './analysis.js', './pdf.js', './stats-worker.js', './styles.css', './icon.svg', './manifest.json'];
+const CACHE = 'geosurvey-v1.6.0';
+const SHELL = ['./', './index.html', './app.js', './sav.js', './exports.js', './analysis.js', './pdf.js', './designer.js', './stats-worker.js', './styles.css', './icon.svg', './manifest.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

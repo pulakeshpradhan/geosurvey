@@ -8,9 +8,9 @@ A free, browser-based household survey platform (in the spirit of Google Forms /
 | 📍 | **One-click location** | Browser GPS + OpenStreetMap **Nominatim** reverse geocoding → village, PIN code, block, district, state, country, full address. |
 | 🖼️ | **Geo/time-stamped photos** | Every photo is stamped (date-time, lat/lon ± accuracy, address, enumerator, section) before storage; up to 12 per household. |
 | ☁️ | **Database** | Submissions → **Google Sheet**; stamped photos → **Google Drive** folder with links in the sheet (tiny Apps Script). Works offline: records queue on the device (IndexedDB for photos) and sync when back online. |
-| 🔐 | **Admin panel** | Token-protected dashboard: totals, breakdowns, search, delete rows, exports. |
+| ✏️ | **Edit tab (questionnaire designer)** | Upload the paper questionnaire (PDF/photos) → pages become images → the AI drafts a refined digital questionnaire → add / delete / reorder / edit sections and questions like a form builder → **Approve & apply** (device) or **publish to team** (stored in the backend; every device adopts it). Likert constructs and the SEM model are derived from the design. Also hosts the token-protected **Collected data** panel: totals, breakdowns, search, delete rows, exports. |
 | 📊 | **Analysis tab** | Automatic, in-browser statistics on the collected data (see below) with charts and an auto-written interpretation report. Re-runs whenever data changes. |
-| ⬇️ | **Exports** | CSV, JSON, **SPSS** (`.sps` syntax with embedded data, variable & value labels — Run All in SPSS/PSPP), **KMZ** (Google Earth / QGIS placemarks with all fields and thumbnails). |
+| ⬇️ | **Exports** | CSV, JSON, **SPSS `.sav`** (native system file with variable labels, value labels, measurement levels, DATETIME — opens directly in SPSS/PSPP/R `haven`), **KMZ** (Google Earth / QGIS placemarks with all fields and thumbnails), **A4 PDF** of the current form. |
 | 📱 | **Mobile-first PWA** | Installable, opens offline, designed for phone data collection. |
 
 **Live:** https://pulakeshpradhan.github.io/geosurvey/
@@ -49,11 +49,11 @@ Everything runs client-side in a Web Worker (`stats-worker.js`, pure JS, no libr
 
 Use **Generate sample data** to create synthetic households with a known causal structure (kept separate from real records; remove with one click) to see the pipeline work before fieldwork.
 
-Constructs and the hypothesised model are defined in `CONSTRUCTS` / `STRUCTURAL_MODEL` at the top of [`app.js`](app.js); change them and the analysis adapts.
+Constructs are derived from Likert questions sharing a construct code; the default model (`STRUCTURAL_MODEL` in [`app.js`](app.js)) is used when the default constructs exist, otherwise an “all predictors → outcome” model is generated. Use Settings → “Show sample-data tools” to reveal the synthetic-data generator.
 
 ## Customising the questionnaire
 
-Edit `LOCATION_FIELDS`, `SECTIONS` and `REMARKS_FIELDS` in [`app.js`](app.js). Field types: `text`, `number`, `date`, `tel`, `select`, `multi`, `likert`, `textarea`. `ai: true` exposes a field to the AI; `required: true` enforces it; a section's `photoHint` enables its photo tools.
+Use the **Edit** tab (no code needed), or change the defaults in `SECTIONS` / `REMARKS_FIELDS` in [`app.js`](app.js). Field types: `text`, `number`, `date`, `tel`, `select`, `multi`, `likert`, `textarea`. `ai: true` exposes a field to the AI; `required: true` enforces it; a section's `photoHint` enables its photo tools.
 
 ## Files
 
@@ -61,7 +61,8 @@ Edit `LOCATION_FIELDS`, `SECTIONS` and `REMARKS_FIELDS` in [`app.js`](app.js). F
 |---|---|
 | `index.html`, `styles.css` | UI (Survey / Records / Analysis / Admin) |
 | `app.js` | Questionnaire schema, AI providers, location, photo stamping, offline queue, admin |
-| `exports.js` | CSV, JSON, SPSS syntax, KMZ (own ZIP writer) |
+| `exports.js`, `sav.js` | CSV, JSON, SPSS .sav writer, KMZ (own ZIP writer) |
+| `designer.js`, `pdf.js` | Questionnaire designer; A4 PDF of the current form |
 | `analysis.js`, `stats-worker.js` | Analysis UI + statistics engine |
 | `backend/Code.gs` | Google Apps Script backend |
 | `sw.js`, `manifest.json` | Offline PWA |

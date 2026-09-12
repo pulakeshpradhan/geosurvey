@@ -9,6 +9,7 @@
   --radius: 14px; --font: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body { font: 500 14.5px/1.55 var(--font); background: var(--bg); color: var(--text); padding-bottom: 88px; -webkit-tap-highlight-color: transparent; -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); }
@@ -24,6 +25,7 @@ p { margin: 0; }
 .tab { border: 0; background: transparent; padding: 8px 12px; border-radius: 8px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; }
 .tab:hover { color: var(--accent); background: var(--accent-soft); }
 .tab.active { color: var(--accent); font-weight: 800; background: var(--accent-soft); }
+#editBtn.active { background: var(--accent-soft); border-color: var(--line-strong); }
 .badge { background: var(--rust); color: #fff; border-radius: 999px; padding: 0 6px; font-size: 11px; margin-left: 2px; }
 .icon-btn { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 6px; display: inline-flex; font: inherit; }
 .icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
@@ -273,3 +275,22 @@ dialog::backdrop { background: rgba(11,14,19,.5); }
   .an-grid { grid-template-columns: 1fr; }
   .chart.path { max-height: none; }
 }
+
+/* Questionnaire designer */
+.dsec { padding: 18px; }
+.dsec-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.dsec-title { flex: 1; min-width: 200px; font-weight: 800; font-size: 15px; }
+.dsec-hint { margin-bottom: 10px; font-size: 13px; }
+.dq-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.dq { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--card-soft); display: flex; flex-direction: column; gap: 8px; }
+.dq-main { display: grid; grid-template-columns: 1fr 160px; gap: 8px; }
+.dq-opts { min-height: 60px; font-size: 13px; }
+.dq-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 12.5px; color: var(--muted); }
+.dq-row label { display: inline-flex; align-items: center; gap: 6px; }
+.dq-key code { font-size: 11px; }
+.dq-actions { margin-left: auto; display: flex; gap: 12px; }
+.input-xs { width: 70px; padding: 3px 6px; font-size: 12px; display: inline-block; }
+.approve-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border-color: var(--line-strong); background: var(--accent-soft); }
+.approve-bar > div:first-child { flex: 1; min-width: 240px; }
+.dpage.thumb { width: 64px; height: 84px; }
+@media (max-width: 640px) { .dq-main { grid-template-columns: 1fr; } .dq-actions { margin-left: 0; } }

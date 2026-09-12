@@ -1,5 +1,5 @@
 /* GeoSurvey exports: CSV, JSON, SPSS (.sps syntax with embedded data + labels), KMZ (Google Earth / GIS).
- * Depends on ALL_FIELDS / META_FIELDS / download() from app.js. */
+ * Depends on ALL_FIELDS / META_FIELDS / LIKERT / download() from app.js and writeSav() from sav.js. */
 'use strict';
 
 const Exports = (() => {
@@ -20,49 +20,39 @@ const Exports = (() => {
     download(`${name}_${today()}.json`, JSON.stringify(rows.map(({ photo_thumb, ...r }) => r), null, 2), 'application/json');
   }
 
-  /* ---------- SPSS syntax (.sps) ----------
-   * Self-contained: DATA LIST FREE + BEGIN DATA … END DATA, VARIABLE LABELS, VALUE LABELS.
-   * Single-select fields are coded 1..n with value labels; multi-select fields become a
-   * string column plus one 0/1 dummy variable per option. Open in SPSS/PSPP → Run All. */
-  function spss(rows, name = 'geosurvey') {
-    if (!rows.length) return toast('Nothing to export');
-    const vars = []; // { name, fmt, label, get(r), values? }
-    const sname = k => k.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 60);
-    const width = (get) => Math.min(32767, Math.max(1, ...rows.map(r => [...get(r)].length)));
+  /* ---------- SPSS system file (.sav) ----------
+   * Binary .sav via sav.js: single-select fields coded 1..n with value labels (nominal), Likert 1–5 with labels (ordinal),
+   * multi-select as a string column plus one 0/1 labelled dummy per option, numbers as scale, timestamps as DATETIME. */
+  function spssVars() {
+    const vars = [];
+    const width = get => Math.min(255, Math.max(1, ...rowsRef.map(r => new TextEncoder().encode(get(r)).length)));
     columns().forEach(f => {
       const k = f.k;
+      if (k === 'submitted_at') return vars.push({ name: k, label: f.label, kind: 'datetime', measure: 'scale', get: r => val(r, k) });
       if (f.type === 'select') {
         const map = Object.fromEntries(f.options.map((o, i) => [o.toLowerCase(), i + 1]));
-        vars.push({ name: sname(k), fmt: 'F2.0', label: f.label, get: r => map[val(r, k).toLowerCase()] ?? '', values: f.options.map((o, i) => [i + 1, o]) });
+        vars.push({ name: k, label: f.label, kind: 'num', width: 2, measure: 'nominal', values: f.options.map((o, i) => [i + 1, o]), get: r => map[val(r, k).toLowerCase()] ?? '' });
       } else if (f.type === 'multi') {
         const getList = r => val(r, k).split(';').map(s => s.trim().toLowerCase()).filter(Boolean);
-        vars.push({ name: sname(k), fmt: `A${width(r => val(r, k))}`, label: f.label + ' (all selected)', get: r => val(r, k) });
-        f.options.forEach((o, i) => vars.push({ name: sname(`${k}_${i + 1}`), fmt: 'F1.0', label: `${f.label}: ${o}`, get: r => val(r, k) ? (getList(r).includes(o.toLowerCase()) ? 1 : 0) : '', values: [[0, 'No'], [1, 'Yes']] }));
+        vars.push({ name: k, label: f.label + ' (all selected)', kind: 'str', width: width(r => val(r, k)), measure: 'nominal', get: r => val(r, k) });
+        f.options.forEach((o, i) => vars.push({ name: `${k}_${i + 1}`, label: `${f.label}: ${o}`, kind: 'num', width: 1, measure: 'nominal', values: [[0, 'No'], [1, 'Yes']], get: r => val(r, k) ? (getList(r).includes(o.toLowerCase()) ? 1 : 0) : '' }));
       } else if (f.type === 'likert') {
-        vars.push({ name: sname(k), fmt: 'F1.0', label: f.label, get: r => { const n = parseInt(val(r, k), 10); return isNaN(n) ? '' : n; }, values: LIKERT.map((l, i) => [i + 1, l]) });
+        vars.push({ name: k, label: f.label, kind: 'num', width: 1, measure: 'ordinal', values: LIKERT.map((l, i) => [i + 1, l]), get: r => { const n = parseInt(val(r, k), 10); return isNaN(n) ? '' : n; } });
       } else if (f.type === 'number' || ['latitude', 'longitude', 'gps_accuracy_m', 'altitude_m'].includes(k)) {
-        vars.push({ name: sname(k), fmt: 'F12.6', label: f.label, get: r => { const n = parseFloat(val(r, k)); return isNaN(n) ? '' : n; } });
+        const dec = ['latitude', 'longitude'].includes(k) ? 6 : 0;
+        vars.push({ name: k, label: f.label, kind: 'num', width: dec ? 12 : 8, decimals: dec, measure: 'scale', get: r => { const n = parseFloat(val(r, k)); return isNaN(n) ? '' : n; } });
       } else {
-        vars.push({ name: sname(k), fmt: `A${width(r => val(r, k))}`, label: f.label, get: r => val(r, k) });
+        vars.push({ name: k, label: f.label, kind: 'str', width: width(r => val(r, k)), measure: 'nominal', get: r => val(r, k) });
       }
     });
-    const qs = s => `"${String(s).replace(/[\r\n]+/g, ' ').replace(/"/g, '""')}"`;
-    const cell = (v, fmt) => fmt.startsWith('A') ? qs(v) : (v === '' ? '.' : v); // "." = system-missing
-    const lines = [
-      `* GeoSurvey export ${new Date().toISOString()} — ${rows.length} cases.`,
-      '* Open this file in SPSS or PSPP and choose Run > All.',
-      'SET UNICODE=ON.',
-      `DATA LIST FREE / ${vars.map(v => `${v.name} (${v.fmt})`).join(' ')}.`,
-      'BEGIN DATA',
-      ...rows.map(r => vars.map(v => cell(v.get(r), v.fmt)).join(' ')),
-      'END DATA.',
-      `VARIABLE LABELS ${vars.map(v => `${v.name} ${qs(v.label)}`).join(' / ')}.`,
-      ...vars.filter(v => v.values).map(v => `VALUE LABELS ${v.name} ${v.values.map(([c, l]) => `${c} ${qs(l)}`).join(' ')}.`),
-      `MISSING VALUES ${vars.filter(v => !v.fmt.startsWith('A')).map(v => v.name).join(' ')} ().`,
-      'EXECUTE.',
-      `SAVE OUTFILE="${name}_${today()}.sav".`,
-    ];
-    download(`${name}_${today()}.sps`, '﻿' + lines.join('\r\n'), 'text/plain;charset=utf-8');
+    return vars;
+  }
+  let rowsRef = [];
+  function spss(rows, name = 'geosurvey') {
+    if (!rows.length) return toast('Nothing to export');
+    rowsRef = rows;
+    const bytes = writeSav(spssVars(), rows, `GeoSurvey export ${new Date().toISOString().slice(0, 10)}`);
+    download(`${name}_${today()}.sav`, new Blob([bytes], { type: 'application/x-spss-sav' }));
   }
 
   /* ---------- KMZ (KML inside a stored ZIP) ---------- */
