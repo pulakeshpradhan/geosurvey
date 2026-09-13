@@ -122,10 +122,18 @@ const PdfExport = (() => {
 
     sectionTitle(String(SECTIONS.length + 2).padStart(2, '0'), 'Remarks');
     REMARKS_FIELDS.forEach(f => paragraph(f.label, rec[f.k]));
+    const transcript = ($('#transcript')?.value || '').trim();
+    if (transcript || audioClips.length) {
+      sectionTitle(String(SECTIONS.length + 3).padStart(2, '0'), `Interview recording & transcript${audioClips.length ? ` (${audioClips.length} clip(s), ${fmtDur(audioClips.reduce((s, c) => s + c.duration, 0))})` : ''}`);
+      if (audioClips.length) paragraph('Recordings (stored with the record)', audioClips.map((c, i) => `Clip ${i + 1}: ${fmtDur(c.duration)}, ${new Date(c.taken_at).toLocaleString()}${c.lat != null ? `, ${c.lat.toFixed(5)}, ${c.lon.toFixed(5)}` : ''}`).join('; '));
+      // Standard PDF fonts cannot render non-Latin scripts: print what is representable and say where the full text lives
+      const latin = clean(transcript); const dropped = transcript.length && latin.replace(/\s/g, '').length < transcript.replace(/\s/g, '').length * 0.6;
+      paragraph('Transcript (verbatim)', dropped ? '[Transcript is in a non-Latin script; the full text is stored with the record, in the exports and on Drive]' + (latin.trim() ? ' ' + latin : '') : (transcript || '-'));
+    }
 
     // Photos
     if (photos.length) {
-      sectionTitle(String(SECTIONS.length + 3).padStart(2, '0'), `Photographs (${photos.length})`);
+      sectionTitle(String(SECTIONS.length + 4).padStart(2, '0'), `Photographs (${photos.length})`);
       const gap = 6, pw = (CW - gap) / 2, maxH = 62;
       for (let i = 0; i < photos.length; i += 2) {
         const pair = photos.slice(i, i + 2);

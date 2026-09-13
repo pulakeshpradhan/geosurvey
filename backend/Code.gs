@@ -99,6 +99,13 @@ function doPost(e) {
     var rid = String(data.id || Utilities.getUuid());
     if (photos.length) data.photo_urls = savePhotos_(rid, photos, 'photo').join('\n');
     if (audio.length) data.audio_urls = savePhotos_(rid, audio, 'audio').join('\n');
+    if (data.interview_transcript && String(data.interview_transcript).trim()) {
+      try {
+        var tf = folder_().createFile(rid.slice(0, 8) + '_transcript.txt', String(data.interview_transcript), 'text/plain');
+        tf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        data.transcript_url = 'https://drive.google.com/file/d/' + tf.getId() + '/view';
+      } catch (e2) { data.transcript_url = 'ERROR: ' + e2; }
+    }
     data.received_at = new Date().toISOString();
 
     var added = false;
@@ -109,7 +116,7 @@ function doPost(e) {
       if (v === undefined || v === null) return '';
       return typeof v === 'object' ? JSON.stringify(v) : v;
     }));
-    return json_({ ok: true, id: data.id, row: sh.getLastRow(), photo_urls: data.photo_urls || '', audio_urls: data.audio_urls || '' });
+    return json_({ ok: true, id: data.id, row: sh.getLastRow(), photo_urls: data.photo_urls || '', audio_urls: data.audio_urls || '', transcript_url: data.transcript_url || '' });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {

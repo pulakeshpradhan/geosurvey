@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.10.1';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -228,7 +228,7 @@ const META_FIELDS = [
   { k: 'photo_count', label: 'Photo count', type: 'number' }, { k: 'photo_urls', label: 'Photo URLs', type: 'text' },
   { k: 'ai_engine', label: 'AI engine used', type: 'text' }, { k: 'app_version', label: 'App version', type: 'text' },
   { k: 'interview_transcript', label: 'Interview transcript', type: 'text' },
-  { k: 'audio_count', label: 'Audio clips', type: 'number' }, { k: 'audio_duration_s', label: 'Audio duration (s)', type: 'number' }, { k: 'audio_urls', label: 'Audio URLs', type: 'text' },
+  { k: 'audio_count', label: 'Audio clips', type: 'number' }, { k: 'audio_duration_s', label: 'Audio duration (s)', type: 'number' }, { k: 'audio_urls', label: 'Audio URLs', type: 'text' }, { k: 'transcript_url', label: 'Transcript URL', type: 'text' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -897,7 +897,7 @@ async function syncPending() {
   syncing = true; $('#syncBtn').disabled = true;
   let ok = 0, fail = 0;
   for (const rec of pending) {
-    try { const j = await sendRecord(rec); rec.status = 'synced'; delete rec.error; if (j.photo_urls) rec.photo_urls = j.photo_urls; if (j.audio_urls) rec.audio_urls = j.audio_urls; ok++; }
+    try { const j = await sendRecord(rec); rec.status = 'synced'; delete rec.error; if (j.photo_urls) rec.photo_urls = j.photo_urls; if (j.audio_urls) rec.audio_urls = j.audio_urls; if (j.transcript_url) rec.transcript_url = j.transcript_url; ok++; }
     catch (e) { rec.status = 'failed'; rec.error = e.message; fail++; }
     saveRecords(records);
   }
@@ -913,20 +913,22 @@ function renderLocalTable() {
   const synced = records.filter(r => r.status === 'synced').length;
   $('#localSummary').textContent = records.length ? `${records.length} record(s) · ${synced} synced · ${records.length - synced} pending or failed. Stamped photos are kept on this device and uploaded to Drive on sync.` : 'No submissions on this device yet.';
   $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>` +
-    records.map(r => `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count ? `<button class="link-btn" data-dl="${r.id}">photos</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`).join('') + '</tbody>' : '';
+    records.map(r => `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`).join('') + '</tbody>' : '';
   $$('#localTable [data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Delete this record (and its photos) from the device?')) return;
     await PhotoDB.del(b.dataset.del); saveRecords(getRecords().filter(r => r.id !== b.dataset.del)); renderLocalTable();
   });
   $$('#localTable [data-view]').forEach(i => i.onclick = async () => openGallery('Stamped photos', await PhotoDB.get(i.dataset.view)));
   $$('#localTable [data-audio]').forEach(b => b.onclick = async () => {
-    const clips = await PhotoDB.getAudio(b.dataset.audio);
-    $('#photoDlgTitle').textContent = 'Interview recordings';
-    $('#photoDlgGallery').innerHTML = clips.map((c, i) => `<figure class="audio-fig"><audio controls src="${c.dataUrl}"></audio><figcaption>Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtDate(c.taken_at)}${c.lat != null ? ` · ${(+c.lat).toFixed(5)}, ${(+c.lon).toFixed(5)}` : ''}</figcaption></figure>`).join('') || '<p class="dim">No clips stored.</p>';
+    const clips = await PhotoDB.getAudio(b.dataset.audio); const rec = getRecords().find(x => x.id === b.dataset.audio);
+    $('#photoDlgTitle').textContent = 'Interview recording & transcript';
+    $('#photoDlgGallery').innerHTML = (clips.map((c, i) => `<figure class="audio-fig"><audio controls src="${c.dataUrl}"></audio><figcaption>Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtDate(c.taken_at)}${c.lat != null ? ` · ${(+c.lat).toFixed(5)}, ${(+c.lon).toFixed(5)}` : ''}</figcaption></figure>`).join('') + (rec?.interview_transcript ? `<div class="transcript-view"><div class="dim">Transcript (verbatim, as recorded)</div><p>${esc(rec.interview_transcript)}</p></div>` : '')) || '<p class="dim">No recording or transcript stored.</p>';
     $('#photoDlg').showModal();
   });
   $$('#localTable [data-dl]').forEach(b => b.onclick = async () => {
     for (const p of await PhotoDB.get(b.dataset.dl)) { download(`${b.dataset.dl.slice(0, 8)}_${p.name}`, await (await fetch(p.dataUrl)).blob()); await new Promise(r => setTimeout(r, 300)); }
+    for (const c of await PhotoDB.getAudio(b.dataset.dl)) { download(`${b.dataset.dl.slice(0, 8)}_${c.name || 'audio.webm'}`, await (await fetch(c.dataUrl)).blob()); await new Promise(r => setTimeout(r, 300)); }
+    const rec = getRecords().find(x => x.id === b.dataset.dl); if (rec?.interview_transcript) download(`${b.dataset.dl.slice(0, 8)}_transcript.txt`, rec.interview_transcript, 'text/plain;charset=utf-8');
   });
   updatePendingBadge();
 }
