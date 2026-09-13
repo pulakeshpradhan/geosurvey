@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.13.1';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -329,9 +329,9 @@ function renderForm() {
         ${s.photoHint ? `<div class="sec-tools">
           <div class="sec-thumbs" data-thumbs="${s.id}"></div>
           <label class="tool" title="Capture a photo for this section with the camera">${CAMERA_SVG}<input type="file" accept="image/*" capture="environment" data-sec="${s.id}" hidden></label>
-          <button type="button" class="tool tool-mic" data-mic="${s.id}" title="Record the answers for this section — tap again to stop; the section is filled automatically">${MIC_SVG}</button>
           <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos and recordings with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
-        </div>` : `<div class="sec-tools"><div class="sec-thumbs" data-thumbs="${s.id}"></div><button type="button" class="tool tool-mic" data-mic="${s.id}" title="Record the answers for this section — tap again to stop; the section is filled automatically">${MIC_SVG}</button><button type="button" class="tool tool-ai" data-ai="${s.id}" title="Fill this section from the recorded interview / transcript with AI">${AI_SVG}<span class="tool-badge" hidden>0</span></button></div>`}
+          <button type="button" class="tool tool-mic" data-mic="${s.id}" title="Record the answers for this section — tap again to stop; the section is filled automatically">${MIC_SVG}</button>
+        </div>` : `<div class="sec-tools"><div class="sec-thumbs" data-thumbs="${s.id}"></div><button type="button" class="tool tool-ai" data-ai="${s.id}" title="Fill this section from the recorded interview / transcript with AI">${AI_SVG}<span class="tool-badge" hidden>0</span></button><button type="button" class="tool tool-mic" data-mic="${s.id}" title="Record the answers for this section — tap again to stop; the section is filled automatically">${MIC_SVG}</button></div>`}
       </div>
       ${s.photoHint ? `<p class="sub sec-hint">${esc(s.photoHint)}</p>` : `<p class="sub sec-hint">Ask the respondent to rate each statement on the scale shown.</p>`}
       <div class="status sec-status" data-status="${s.id}"></div>
