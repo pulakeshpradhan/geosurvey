@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.12.1';
+const APP_VERSION = '1.13.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -287,6 +287,7 @@ function download(name, content, type) {
 }
 const UPLOAD_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
 const AI_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 17l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/><path d="M4 3l.5 1.5L6 5l-1.5.5L4 7l-.5-1.5L2 5l1.5-.5z"/></svg>';
+const MIC_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></svg>';
 const CAMERA_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>';
 
 /* ------------------------------------------------------------------ */
@@ -328,8 +329,9 @@ function renderForm() {
         ${s.photoHint ? `<div class="sec-tools">
           <div class="sec-thumbs" data-thumbs="${s.id}"></div>
           <label class="tool" title="Capture a photo for this section with the camera">${CAMERA_SVG}<input type="file" accept="image/*" capture="environment" data-sec="${s.id}" hidden></label>
-          <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos and the recorded interview with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
-        </div>` : `<div class="sec-tools"><button type="button" class="tool tool-ai" data-ai="${s.id}" title="Fill this section from the recorded interview / transcript with AI">${AI_SVG}<span class="tool-badge" hidden>0</span></button></div>`}
+          <button type="button" class="tool tool-mic" data-mic="${s.id}" title="Record the answers for this section — tap again to stop; the section is filled automatically">${MIC_SVG}</button>
+          <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos and recordings with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
+        </div>` : `<div class="sec-tools"><div class="sec-thumbs" data-thumbs="${s.id}"></div><button type="button" class="tool tool-mic" data-mic="${s.id}" title="Record the answers for this section — tap again to stop; the section is filled automatically">${MIC_SVG}</button><button type="button" class="tool tool-ai" data-ai="${s.id}" title="Fill this section from the recorded interview / transcript with AI">${AI_SVG}<span class="tool-badge" hidden>0</span></button></div>`}
       </div>
       ${s.photoHint ? `<p class="sub sec-hint">${esc(s.photoHint)}</p>` : `<p class="sub sec-hint">Ask the respondent to rate each statement on the scale shown.</p>`}
       <div class="status sec-status" data-status="${s.id}"></div>
@@ -346,6 +348,7 @@ function renderForm() {
     await addFiles(files, sec);
   }));
   $$('button[data-ai]').forEach(b => b.addEventListener('click', () => analyzePhotos(b.dataset.ai)));
+  $$('button[data-mic]').forEach(b => b.addEventListener('click', () => toggleSectionRecording(b.dataset.mic)));
   if (!formListenersBound) {
     formListenersBound = true;
     $('#formView').addEventListener('input', e => {
@@ -402,7 +405,7 @@ function clearForm() {
   setValue('surveyor', surveyor || settings.surveyor);
   setValue('survey_date', new Date().toISOString().slice(0, 10));
   photos = []; renderThumbs();
-  if (recording) stopRecording();
+  if (recording) { recSection = ''; stopRecording(); }
   audioClips = []; renderClips();
   if ($('#transcript')) { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; }
   if ($('#aiContext')) $('#aiContext').value = '';
@@ -605,7 +608,7 @@ function renderThumbs() {
   $$('#thumbStrip .x').forEach(b => b.onclick = e => { e.stopPropagation(); photos.splice(+b.dataset.i, 1); renderThumbs(); });
   $$('#thumbStrip .thumb').forEach(t => t.onclick = () => openGallery('Photos for this submission', photos));
   updateAnalyzeBtn();
-  $$('button[data-ai]').forEach(b => { const n = photos.filter(p => p.section === b.dataset.ai).length; const bd = $('.tool-badge', b); bd.textContent = n; bd.hidden = !n; b.classList.toggle('ready', n > 0 || (audioClips.length > 0 && !SECTION_BY_ID[b.dataset.ai]?.photoHint)); });
+  $$('button[data-ai]').forEach(b => { const n = photos.filter(p => p.section === b.dataset.ai).length + audioClips.filter(c => c.section === b.dataset.ai).length; const bd = $('.tool-badge', b); bd.textContent = n; bd.hidden = !n; b.classList.toggle('ready', n > 0 || (audioClips.length > 0 && !SECTION_BY_ID[b.dataset.ai]?.photoHint)); });
   // small thumbnails beside each section's tools, each with its own delete
   $$('[data-thumbs]').forEach(strip => {
     const sec = strip.dataset.thumbs;
@@ -625,22 +628,30 @@ function openGallery(title, list) {
 /* Voice: record the interview → live speech-to-text (Web Speech API, free, on-device/browser) →       */
 /* transcript feeds Analyze & fill. Fallback: MediaRecorder audio → Gemini transcription.                */
 /* ------------------------------------------------------------------ */
-let recording = false, mediaRec = null, mediaChunks = [], recStart = 0, recTimer = null;
+let recording = false, mediaRec = null, mediaChunks = [], recStart = 0, recTimer = null, recSection = '';
 let audioClips = []; // [{ dataUrl, mime, bytes, duration, taken_at, lat, lon }] — evidence, and input for Analyze & fill
 function fmtDur(s) { s = Math.round(s || 0); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
 function updateAnalyzeBtn() { const t = ($('#transcript')?.value || '').trim(); $('#analyzeBtn').disabled = photos.length === 0 && !t && audioClips.length === 0; }
 function renderClips() {
   const host = $('#audioClips'); if (!host) return;
-  host.innerHTML = audioClips.map((c, i) => `<div class="clip"><span class="clip-ic">🎙</span><span class="clip-meta">Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtBytes(c.bytes)}${c.lat != null ? ' · GPS' : ''}</span><audio controls preload="none" src="${c.dataUrl}"></audio><button type="button" class="link-btn" data-tx="${i}" title="Transcribe this clip only (Analyze & fill also transcribes)">Transcribe</button><button type="button" class="icon-btn" data-clip="${i}" title="Delete clip">✕</button></div>`).join('');
+  host.innerHTML = audioClips.map((c, i) => `<div class="clip"><span class="clip-ic">🎙</span><span class="clip-meta">Clip ${i + 1}${c.section && SECTION_BY_ID[c.section] ? ' · ' + esc(SECTION_BY_ID[c.section].title) : ''} · ${fmtDur(c.duration)} · ${fmtBytes(c.bytes)}${c.lat != null ? ' · GPS' : ''}</span><audio controls preload="none" src="${c.dataUrl}"></audio><button type="button" class="link-btn" data-tx="${i}" title="Transcribe this clip only (Analyze & fill also transcribes)">Transcribe</button><button type="button" class="icon-btn" data-clip="${i}" title="Delete clip">✕</button></div>`).join('');
   $$('#audioClips [data-clip]').forEach(b => b.onclick = () => { if (confirm('Delete this recording?')) { audioClips.splice(+b.dataset.clip, 1); renderClips(); updateAnalyzeBtn(); } });
   $$('#audioClips [data-tx]').forEach(b => b.onclick = async () => { if (!settings.geminiKey) { openSettings(); return toast('Add a Gemini API key to transcribe audio', 'err'); } b.disabled = true; try { await transcribeClip(audioClips[+b.dataset.tx]); } finally { b.disabled = false; } });
   host.hidden = !audioClips.length; if (audioClips.length) $('#transcriptWrap').hidden = false;
-  updateAnalyzeBtn();
+  updateAnalyzeBtn(); if (typeof renderThumbs === 'function') $$('button[data-ai]').forEach(b => { const n = photos.filter(p => p.section === b.dataset.ai).length + audioClips.filter(c => c.section === b.dataset.ai).length; const bd = $('.tool-badge', b); bd.textContent = n; bd.hidden = !n; b.classList.toggle('ready', n > 0 || (audioClips.length > 0 && !SECTION_BY_ID[b.dataset.ai]?.photoHint)); });
 }
 function setRecUI(on) {
-  const b = $('#recBtn'); b.classList.toggle('recording', on); b.querySelector('span').textContent = on ? 'Stop' : 'Record';
-  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => setStatus($('#recStatus'), `● Recording ${fmtDur((Date.now() - recStart) / 1000)} — ${settings.recLang || 'any Indian language'}; press Stop when done`, 'err'), 1000); }
+  const b = $('#recBtn'); b.classList.toggle('recording', on && !recSection); b.querySelector('span').textContent = on && !recSection ? 'Stop' : 'Record';
+  $$('button[data-mic]').forEach(m => m.classList.toggle('recording', on && m.dataset.mic === recSection));
+  const st = recSection ? $(`[data-status="${recSection}"]`) : $('#recStatus');
+  if (on) { if (!recSection) $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => setStatus(st, `● Recording ${fmtDur((Date.now() - recStart) / 1000)} — ${settings.recLang || 'any Indian language'}; ${recSection ? 'tap the mic again to stop and fill this section' : 'press Stop when done'}`, 'err'), 1000); }
   else clearInterval(recTimer);
+}
+/** Section mic: record → stop → the clip is kept (tagged with the section) and the section is filled automatically. */
+async function toggleSectionRecording(section) {
+  if (recording) { const same = recSection === section; await stopRecording(); if (!same) toast('Previous recording saved'); return; }
+  recSection = section; await startRecording();
+  if (!recording) recSection = '';
 }
 function appendTranscript(text) { const ta = $('#transcript'); const cur = ta.value.replace(/\s+$/, ''); ta.value = (cur ? cur + '\n' : '') + text.trim(); ta.scrollTop = ta.scrollHeight; $('#transcriptWrap').hidden = false; updateAnalyzeBtn(); scheduleDraftSave(); }
 async function toggleRecording() { if (recording) await stopRecording(); else await startRecording(); }
@@ -651,7 +662,7 @@ async function startRecording() {
     const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find(m => MediaRecorder.isTypeSupported(m)) || '';
     mediaChunks = []; mediaRec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 });
     mediaRec.ondataavailable = e => { if (e.data.size) mediaChunks.push(e.data); };
-    mediaRec._stream = stream; mediaRec._start = Date.now(); mediaRec._fix = lastFix;
+    mediaRec._stream = stream; mediaRec._start = Date.now(); mediaRec._fix = lastFix; mediaRec._section = recSection;
     mediaRec.start(1000); recording = true; setRecUI(true);
   } catch (e) { toast(e.name === 'NotAllowedError' ? 'Microphone access denied — allow the microphone and try again' : 'Microphone error: ' + e.message, 'err'); }
 }
@@ -664,15 +675,22 @@ function finishClip() {
       const blob = new Blob(mediaChunks, { type: rec.mimeType || 'audio/webm' });
       if (blob.size < 1000) return res(null);
       const fr = new FileReader();
-      fr.onload = () => { const clip = { dataUrl: fr.result, mime: blob.type.split(';')[0], bytes: blob.size, duration: (Date.now() - rec._start) / 1000, taken_at: new Date(rec._start).toISOString(), lat: rec._fix?.lat ?? null, lon: rec._fix?.lon ?? null }; audioClips.push(clip); renderClips(); res(clip); };
+      fr.onload = () => { const clip = { dataUrl: fr.result, mime: blob.type.split(';')[0], bytes: blob.size, duration: (Date.now() - rec._start) / 1000, taken_at: new Date(rec._start).toISOString(), lat: rec._fix?.lat ?? null, lon: rec._fix?.lon ?? null, section: rec._section || '' }; audioClips.push(clip); renderClips(); res(clip); };
       fr.readAsDataURL(blob);
     };
     rec.stop();
   });
 }
 async function stopRecording() {
-  recording = false; setRecUI(false);
+  recording = false; const section = recSection; setRecUI(false); recSection = '';
   const clip = await finishClip();
+  if (section) {
+    const st = $(`[data-status="${section}"]`);
+    if (!clip) return setStatus(st, 'Nothing was recorded — check the microphone permission and try again', 'err');
+    setStatus(st, `Clip saved (${fmtDur(clip.duration)}) — filling this section…`, '', true);
+    await analyzePhotos(section, null, { audio: [clip] }); // automatic fill from this recording (+ section photos)
+    return;
+  }
   setStatus($('#recStatus'), clip ? `Clip ${audioClips.length} saved (${fmtDur(clip.duration)}). Press Analyze & fill — Gemini listens to the recording${photos.length ? ' and looks at the photos' : ''}, transcribes it and fills the form.` : 'Nothing was recorded — check the microphone permission and try again', clip ? 'ok' : 'err');
 }
 function langHint() { const l = settings.recLang || ''; return (l ? `The interview is primarily in ${l} — treat ${l} as the default language, but auto-detect any switches to English, Hindi or other languages within the speech and transcribe each utterance in the language and script actually spoken` : 'Auto-detect the language of each utterance (an Indian language, Hindi or English, possibly mixed) and transcribe in the language and script actually spoken') + '; keep numbers as digits'; }
@@ -854,10 +872,10 @@ async function analyzeChrome(fields, list, prompt, onStatus) {
 
 let lastEngine = '';
 /** Analyze photos and fill fields. section = '' → whole questionnaire with all photos. */
-async function analyzePhotos(section = '', list = null) {
+async function analyzePhotos(section = '', list = null, opts = {}) {
   list = list || (section ? photos.filter(p => p.section === section) : photos);
   const transcript = ($('#transcript')?.value || '').trim();
-  let audio = audioClips.slice();
+  let audio = opts.audio ? opts.audio.slice() : section ? (audioClips.filter(c => c.section === section).length ? audioClips.filter(c => c.section === section) : audioClips.slice()) : audioClips.slice();
   if (!list.length && !transcript && !audio.length) return toast(section ? 'Capture a photo for this section or record the interview first' : 'Capture a photo or record the interview first');
   const st = section ? $(`[data-status="${section}"]`) : $('#aiStatus');
   const btn = $('#analyzeBtn');
@@ -874,7 +892,11 @@ async function analyzePhotos(section = '', list = null) {
     const fn = engine === 'gemini' ? analyzeGemini : engine === 'openrouter' ? analyzeOpenRouter : analyzeChrome;
     const out = await fn(fields, list, prompt, onStatus, audio);
     let n = 0;
-    if (out && out.interview_transcript && String(out.interview_transcript).trim()) { const ta = $('#transcript'); if (!ta.value.trim() || ta.dataset.auto === '1') { ta.value = String(out.interview_transcript).trim(); ta.dataset.auto = '1'; $('#transcriptWrap').hidden = false; } }
+    if (out && out.interview_transcript && String(out.interview_transcript).trim()) {
+      const ta = $('#transcript'); const text = String(out.interview_transcript).trim();
+      if (opts.audio && section) { if (!ta.value.includes(text)) appendTranscript(`[${SECTION_BY_ID[section].title}] ${text}`); ta.dataset.auto = '1'; }
+      else if (!ta.value.trim() || ta.dataset.auto === '1') { ta.value = text; ta.dataset.auto = '1'; $('#transcriptWrap').hidden = false; }
+    }
     const allowed = new Set(fields.map(f => f.k));
     Object.entries(out || {}).forEach(([k, v]) => {
       if (!allowed.has(k) || v == null || v === '' || (Array.isArray(v) && !v.length)) return;
@@ -921,7 +943,7 @@ async function submitForm() {
     const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', ai_engine: lastEngine, app_version: APP_VERSION, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
     if (photos.length || audioClips.length) {
       if (photos.length) { try { rec.photo_thumb = await makeThumb(photos[0].dataUrl); } catch {} }
-      await PhotoDB.put(id, photos.map(p => ({ name: p.name, section: p.section, dataUrl: p.dataUrl, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc })), audioClips.map((c, i) => ({ name: `audio_${i + 1}.${c.mime.includes('mp4') ? 'm4a' : c.mime.includes('ogg') ? 'ogg' : 'webm'}`, ...c })));
+      await PhotoDB.put(id, photos.map(p => ({ name: p.name, section: p.section, dataUrl: p.dataUrl, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc })), audioClips.map((c, i) => ({ name: `audio_${i + 1}${c.section ? '_' + c.section : ''}.${c.mime.includes('mp4') ? 'm4a' : c.mime.includes('ogg') ? 'ogg' : 'webm'}`, ...c })));
     }
     const records = getRecords(); records.unshift(rec); saveRecords(records);
     clearForm(); lastEngine = '';
