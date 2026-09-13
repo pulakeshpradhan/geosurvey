@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.13.1">
+  <link rel="stylesheet" href="styles.css?v=1.14.0">
 </head>
 <body>
   <header class="topbar">
@@ -103,6 +103,8 @@
           <div><h2>Records on this device</h2><p class="sub" id="localSummary"></p></div>
           <div class="btn-row">
             <button id="syncBtn" class="btn btn-primary btn-sm">Sync pending</button>
+            <button id="uploadFilesBtn" class="btn btn-outline btn-sm" title="Re-upload photos, recordings and transcripts of synced records that are not yet in Drive">Upload files</button>
+            <a id="driveFolderLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" hidden>Open Drive folder</a>
             <button id="exportCsvBtn" class="btn btn-outline btn-sm">Export CSV</button>
             <button id="exportJsonBtn" class="btn btn-outline btn-sm">Export JSON</button>
             <button id="exportSpssBtn" class="btn btn-outline btn-sm" title="SPSS .sav with variable labels, value labels and measurement levels">Export SPSS (.sav)</button>
@@ -273,8 +275,9 @@
         <legend>Data</legend>
         <label>Database endpoint (Apps Script Web App URL)
           <input type="url" id="setEndpoint" class="input" placeholder="https://script.google.com/macros/s/…/exec">
-          <small>See the <a href="https://github.com/pulakeshpradhan/geosurvey#database-google-sheets" target="_blank" rel="noopener">README</a> for the 2-minute Google Sheet setup. Blank = keep data on this device only.</small>
+          <small>See the <a href="https://github.com/pulakeshpradhan/geosurvey#database-google-sheets" target="_blank" rel="noopener">README</a> for the 2-minute Google Sheet setup. Blank = keep data on this device only. After editing Code.gs always deploy a <b>new version</b>.</small>
         </label>
+        <div class="btn-row"><button type="button" id="testDbBtn" class="btn btn-outline btn-sm">Test database</button><span id="testDbStatus" class="status" style="margin:0"></span></div>
         <label>Enumerator name (default)
           <input type="text" id="setSurveyor" class="input">
         </label>
@@ -307,11 +310,11 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=1.13.1"></script>
-  <script src="sav.js?v=1.13.1"></script>
-  <script src="exports.js?v=1.13.1"></script>
-  <script src="analysis.js?v=1.13.1"></script>
-  <script src="pdf.js?v=1.13.1"></script>
-  <script src="designer.js?v=1.13.1"></script>
+  <script src="app.js?v=1.14.0"></script>
+  <script src="sav.js?v=1.14.0"></script>
+  <script src="exports.js?v=1.14.0"></script>
+  <script src="analysis.js?v=1.14.0"></script>
+  <script src="pdf.js?v=1.14.0"></script>
+  <script src="designer.js?v=1.14.0"></script>
 </body>
 </html>

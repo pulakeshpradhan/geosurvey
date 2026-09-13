@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.13.1';
+const APP_VERSION = '1.14.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -951,6 +951,20 @@ async function submitForm() {
   } finally { btn.disabled = false; }
   await syncPending();
 }
+const REQUIRED_BACKEND = 1.14;
+function noteBackend(j) { if (j && j.folderUrl) { settings.folderUrl = j.folderUrl; LS.set('gs_settings', settings); } if (j && j.version) settings.backendVersion = j.version; }
+/** Verify the database endpoint: backend version, sheet and Drive folder. */
+async function testDatabase() {
+  if (!settings.endpoint) throw new Error('No database endpoint set');
+  const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=ping');
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  if (!j.version) throw new Error('Connected, but the backend is an OLD Code.gs without Drive upload — paste the latest backend/Code.gs and deploy a NEW VERSION');
+  noteBackend(j);
+  if (j.driveError) throw new Error(`Backend v${j.version} reached, but Drive access failed: ${j.driveError}. Re-deploy and authorise Drive when prompted.`);
+  if (parseFloat(j.version) < REQUIRED_BACKEND) return `Backend v${j.version} (older than ${REQUIRED_BACKEND} — please deploy the latest Code.gs as a new version) · ${j.rows} rows · Drive folder "${j.folderName}" ready`;
+  return `Backend v${j.version} OK · ${j.rows} rows in the sheet · Drive folder "${j.folderName}" ready`;
+}
 async function sendRecord(rec) {
   const { status, error, ...payload } = rec;
   if (settings.uploadPhotos && rec.photo_count) payload.photos = await PhotoDB.get(rec.id);
@@ -959,8 +973,33 @@ async function sendRecord(rec) {
   const r = await fetch(settings.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
+  noteBackend(j);
+  if (!j.version && ((payload.photos || []).length || (payload.audio || []).length)) rec.files_error = 'Backend is an old Code.gs — files were NOT stored. Deploy the latest Code.gs as a new version, then tap "Upload files".';
+  else if ((payload.photos || []).length && !j.photo_urls) rec.files_error = 'Backend did not return file links — check Drive authorisation.';
+  else delete rec.files_error;
   return j;
 }
+/** Re-upload a record's photos / audio / transcript to Drive (e.g. after the backend was updated). */
+async function attachFiles(rec) {
+  const body = { action: 'attach', id: rec.id, photos: await PhotoDB.get(rec.id), audio: await PhotoDB.getAudio(rec.id), interview_transcript: rec.interview_transcript || '' };
+  if (!body.photos.length && !body.audio.length && !body.interview_transcript) throw new Error('No files kept on this device for that record');
+  const r = await fetch(settings.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) throw new Error(j.error || (j.version ? 'Upload failed' : 'Backend is an old Code.gs — deploy the latest version first'));
+  noteBackend(j);
+  if (j.photo_urls) rec.photo_urls = j.photo_urls; if (j.audio_urls) rec.audio_urls = j.audio_urls; if (j.transcript_url) rec.transcript_url = j.transcript_url;
+  delete rec.files_error; return j;
+}
+async function uploadMissingFiles() {
+  if (!settings.endpoint) return toast('Set the database endpoint in Settings first', 'err');
+  const records = getRecords(); const todo = records.filter(r => r.status === 'synced' && filesMissing(r));
+  if (!todo.length) return toast('All files of synced records are already in Drive', 'ok');
+  let ok = 0, fail = 0;
+  for (const rec of todo) { try { await attachFiles(rec); ok++; } catch (e) { rec.files_error = e.message; fail++; } saveRecords(records); }
+  renderLocalTable();
+  if (ok) toast(`${ok} record(s): files uploaded to Drive`, 'ok'); if (fail) toast(`${fail} record(s) failed — see the Records table`, 'err');
+}
+const filesMissing = r => ((r.photo_count > 0 && !(r.photo_urls || '').includes('drive.google.com')) || (r.audio_count > 0 && !(r.audio_urls || '').includes('drive.google.com')) || (r.interview_transcript && !(r.transcript_url || '').includes('drive.google.com')));
 let syncing = false;
 async function syncPending() {
   if (syncing) return;
@@ -986,13 +1025,21 @@ function renderLocalTable() {
   const records = getRecords();
   const synced = records.filter(r => r.status === 'synced').length;
   $('#localSummary').textContent = records.length ? `${records.length} record(s) · ${synced} synced · ${records.length - synced} pending or failed. Stamped photos are kept on this device and uploaded to Drive on sync.` : 'No submissions on this device yet.';
-  $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>` +
-    records.map(r => `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`).join('') + '</tbody>' : '';
+  const link = $('#driveFolderLink'); if (link) { link.hidden = !settings.folderUrl; link.href = settings.folderUrl || '#'; }
+  const filesCell = r => {
+    if (!(r.photo_count || r.audio_count || r.interview_transcript)) return '<span class="dim">—</span>';
+    if (r.status !== 'synced') return '<span class="pill pending">on device</span>';
+    if (filesMissing(r)) return `<span class="pill failed" title="${esc(r.files_error || 'Files were not stored in Drive')}">not in Drive</span> <button class="link-btn" data-attach="${r.id}">Upload files</button>`;
+    return `<span class="pill synced">in Drive</span> ${String(r.photo_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Photo ${i + 1}">📷</a>`).join('')}${String(r.audio_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Audio ${i + 1}">🎙</a>`).join('')}${(r.transcript_url || '').includes('drive') ? `<a href="${esc(r.transcript_url)}" target="_blank" rel="noopener" title="Transcript">📝</a>` : ''}`;
+  };
+  $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th><th>Files in Drive</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>` +
+    records.map(r => `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`).join('') + '</tbody>' : '';
   $$('#localTable [data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Delete this record (and its photos) from the device?')) return;
     await PhotoDB.del(b.dataset.del); saveRecords(getRecords().filter(r => r.id !== b.dataset.del)); renderLocalTable();
   });
   $$('#localTable [data-view]').forEach(i => i.onclick = async () => openGallery('Stamped photos', await PhotoDB.get(i.dataset.view)));
+  $$('#localTable [data-attach]').forEach(b => b.onclick = async () => { b.disabled = true; const records = getRecords(); const rec = records.find(x => x.id === b.dataset.attach); try { await attachFiles(rec); toast('Files uploaded to Drive', 'ok'); } catch (e) { rec.files_error = e.message; toast(e.message, 'err'); } saveRecords(records); renderLocalTable(); });
   $$('#localTable [data-audio]').forEach(b => b.onclick = async () => {
     const clips = await PhotoDB.getAudio(b.dataset.audio); const rec = getRecords().find(x => x.id === b.dataset.audio);
     $('#photoDlgTitle').textContent = 'Interview recording & transcript';
@@ -1087,6 +1134,7 @@ function saveSettings(quiet = false) {
     orKey: $('#setOrKey').value.trim(), orModel: $('#setOrModel').value.trim() || DEFAULT_SETTINGS.orModel,
     endpoint: $('#setEndpoint').value.trim(), surveyor: $('#setSurveyor').value.trim(),
     maxDim: +$('#setMaxDim').value, recLang: $('#setRecLang').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
+    folderUrl: settings.folderUrl || '',
   };
   if (quiet) return; // dry run for the connection test
   LS.set('gs_settings', settings);
@@ -1143,6 +1191,13 @@ function init() {
   $('#submitBtn').onclick = submitForm;
   $('#resetBtn').onclick = () => { if (confirm('Clear the form?')) clearForm(); };
   $('#syncBtn').onclick = syncPending;
+  $('#uploadFilesBtn').onclick = uploadMissingFiles;
+  $('#testDbBtn').onclick = async e => {
+    e.preventDefault(); const st = $('#testDbStatus'); const saved = settings; saveSettings(true); setStatus(st, 'Checking…', '', true);
+    try { const msg = await testDatabase(); saved.folderUrl = settings.folderUrl; LS.set('gs_settings', saved); st.className = 'status ok'; st.innerHTML = esc(msg) + (settings.folderUrl ? ` · <a href="${esc(settings.folderUrl)}" target="_blank" rel="noopener">open Drive folder</a>` : ''); }
+    catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
+    finally { settings = saved; }
+  };
   $('#exportCsvBtn').onclick = () => Exports.csv(getRecords());
   $('#exportJsonBtn').onclick = () => Exports.json(getRecords());
   $('#exportSpssBtn').onclick = () => Exports.spss(getRecords());

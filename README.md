@@ -32,7 +32,9 @@ A free, browser-based household survey platform (in the spirit of Google Forms /
 3. **Deploy → New deployment → Web app**, *Execute as: Me*, *Who has access: Anyone* → Deploy → authorize (Sheets + Drive) → copy the `/exec` URL.
 4. Paste it in GeoSurvey → ⚙️ Settings → *Database endpoint*.
 
-Each submission becomes one row (new fields become new columns automatically); photos are saved to a Drive folder *GeoSurvey Photos* and linked in `photo_urls`. Without a token the endpoint only reveals the row count.
+Each submission becomes one row (new fields become new columns automatically); photos, interview recordings and transcripts are saved to a Drive folder **GeoSurvey Photos** (in *My Drive* of the account that deployed the script) and linked in `photo_urls`, `audio_urls`, `transcript_url`. Without a token the endpoint only reveals the row count.
+
+**Important — after every change to `Code.gs`:** Deploy → Manage deployments → ✎ Edit → *Version: New version* → Deploy. Apps Script keeps serving the old code otherwise. Use Settings → **Test database** in the app: it reports the live backend version, creates/links the Drive folder, and Records → **Upload files** re-sends files of already-synced records that were not stored.
 
 ## Analysis tab
 

@@ -1,6 +1,10 @@
 /**
  * GeoSurvey — Google Apps Script backend (free database on Google Sheets + photos on Google Drive)
  *
+ * AFTER ANY EDIT OF THIS FILE: Deploy → Manage deployments → ✎ Edit → Version: "New version" → Deploy.
+ * (Apps Script keeps serving the OLD code until you create a new version. The app's Settings → "Test database"
+ *  shows which version is live and links to the Drive folder.)
+ *
  * SETUP (≈2 minutes)
  *  1. Create a new Google Sheet (sheets.new).
  *  2. Extensions → Apps Script. Delete the default code, paste this file.
@@ -17,6 +21,7 @@
  * (Deploy → Manage deployments → Edit → Version: New).
  */
 
+var BACKEND_VERSION = '1.14';                      // reported to the app (Settings → Test database)
 var ADMIN_TOKEN = 'change-me-to-a-long-secret';   // <-- REQUIRED for the Admin tab
 var SHEET_NAME = 'Responses';
 var PHOTO_FOLDER = 'GeoSurvey Photos';
@@ -86,6 +91,7 @@ function doPost(e) {
   lock.waitLock(30000);
   try {
     var data = JSON.parse(e.postData.contents);
+    if (data.action === 'attach') return attachFiles_(data); // (re)upload files for an existing row — no token needed
     if (data.action) return adminAction_(data);
 
     var sh = getSheet_();
@@ -116,7 +122,7 @@ function doPost(e) {
       if (v === undefined || v === null) return '';
       return typeof v === 'object' ? JSON.stringify(v) : v;
     }));
-    return json_({ ok: true, id: data.id, row: sh.getLastRow(), photo_urls: data.photo_urls || '', audio_urls: data.audio_urls || '', transcript_url: data.transcript_url || '' });
+    return json_({ ok: true, id: data.id, row: sh.getLastRow(), photo_urls: data.photo_urls || '', audio_urls: data.audio_urls || '', transcript_url: data.transcript_url || '', folderUrl: folderUrlSafe_(), version: BACKEND_VERSION });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {
@@ -129,6 +135,10 @@ function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
     if (p.action === 'schema') { var js = getConfig_('schema'); return json_({ ok: true, schema: js ? JSON.parse(js) : null }); }
+    if (p.action === 'ping') { // health check: version, sheet, Drive folder (created if missing)
+      var fu = '', ferr = ''; try { fu = folder_().getUrl(); } catch (e0) { ferr = String(e0); }
+      return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: Math.max(0, getSheet_().getLastRow() - 1) });
+    }
     var sh = getSheet_();
     var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
     if (p.action === 'list') {
@@ -152,6 +162,27 @@ function doGet(e) {
   }
 }
 
+function folderUrlSafe_() { try { return folder_().getUrl(); } catch (e) { return ''; } }
+/** Store photos / audio / transcript for an already-submitted record and write the links into its row. */
+function attachFiles_(data) {
+  var sh = getSheet_(); var rid = String(data.id || '');
+  if (!rid || sh.getLastRow() < 2) return json_({ ok: false, error: 'Record not found' });
+  var ids = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues(); var row = -1;
+  for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === rid) { row = i + 2; break; }
+  if (row < 0) return json_({ ok: false, error: 'Record not found in the sheet — sync it first' });
+  var out = {};
+  if ((data.photos || []).length) out.photo_urls = savePhotos_(rid, data.photos, 'photo').join('\n');
+  if ((data.audio || []).length) out.audio_urls = savePhotos_(rid, data.audio, 'audio').join('\n');
+  if (data.interview_transcript && String(data.interview_transcript).trim()) {
+    try { var tf = folder_().createFile(rid.slice(0, 8) + '_transcript.txt', String(data.interview_transcript), 'text/plain'); tf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); out.transcript_url = 'https://drive.google.com/file/d/' + tf.getId() + '/view'; } catch (e2) { out.transcript_url = 'ERROR: ' + e2; }
+  }
+  var headers = headers_(sh), added = false;
+  Object.keys(out).forEach(function (k) { if (headers.indexOf(k) === -1) { headers.push(k); added = true; } });
+  if (added) sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  Object.keys(out).forEach(function (k) { sh.getRange(row, headers.indexOf(k) + 1).setValue(out[k]); });
+  out.ok = true; out.folderUrl = folderUrlSafe_(); out.version = BACKEND_VERSION;
+  return json_(out);
+}
 function adminAction_(data) {
   if (!isAdmin_(data.token)) return json_({ ok: false, error: 'Invalid admin token' });
   var sh = getSheet_();
