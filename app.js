@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -227,6 +227,8 @@ const META_FIELDS = [
   { k: 'id', label: 'Record ID', type: 'text' }, { k: 'submitted_at', label: 'Submitted at', type: 'text' },
   { k: 'photo_count', label: 'Photo count', type: 'number' }, { k: 'photo_urls', label: 'Photo URLs', type: 'text' },
   { k: 'ai_engine', label: 'AI engine used', type: 'text' }, { k: 'app_version', label: 'App version', type: 'text' },
+  { k: 'interview_transcript', label: 'Interview transcript', type: 'text' },
+  { k: 'audio_count', label: 'Audio clips', type: 'number' }, { k: 'audio_duration_s', label: 'Audio duration (s)', type: 'number' }, { k: 'audio_urls', label: 'Audio URLs', type: 'text' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -253,8 +255,9 @@ const PhotoDB = {
       t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error);
     });
   },
-  put(id, photos) { return this.tx('readwrite', st => st.put({ id, photos })); },
+  put(id, photos, audio = []) { return this.tx('readwrite', st => st.put({ id, photos, audio })); },
   async get(id) { const r = await this.tx('readonly', st => st.get(id)); return r ? r.photos : []; },
+  async getAudio(id) { const r = await this.tx('readonly', st => st.get(id)); return r ? (r.audio || []) : []; },
   del(id) { return this.tx('readwrite', st => st.delete(id)); },
 };
 
@@ -398,6 +401,9 @@ function clearForm() {
   setValue('surveyor', surveyor || settings.surveyor);
   setValue('survey_date', new Date().toISOString().slice(0, 10));
   photos = []; renderThumbs();
+  if (recording) stopRecording();
+  audioClips = []; renderClips();
+  if ($('#transcript')) { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; }
   if ($('#aiContext')) $('#aiContext').value = '';
   setStatus($('#aiStatus'), ''); setStatus($('#locStatus'), '');
   $$('.sec-status').forEach(s => setStatus(s, ''));
@@ -414,8 +420,8 @@ function updateProgress() {
   SECTIONS.forEach(s => { $(`[data-count="${s.id}"]`).textContent = `${s.fields.filter(filled).length}/${s.fields.length}`; });
 }
 let draftTimer;
-function scheduleDraftSave() { clearTimeout(draftTimer); draftTimer = setTimeout(() => LS.set('gs_draft', collect()), 400); }
-function restoreDraft() { const d = LS.get('gs_draft', null); if (d) Object.entries(d).forEach(([k, v]) => setValue(k, v)); }
+function scheduleDraftSave() { clearTimeout(draftTimer); draftTimer = setTimeout(() => LS.set('gs_draft', { ...collect(), __transcript: $('#transcript')?.value || '' }), 400); }
+function restoreDraft() { const d = LS.get('gs_draft', null); if (!d) return; Object.entries(d).forEach(([k, v]) => { if (k === '__transcript') { if (v && $('#transcript')) { $('#transcript').value = v; $('#transcriptWrap').hidden = false; updateAnalyzeBtn(); } } else setValue(k, v); }); }
 
 /* ------------------------------------------------------------------ */
 /* Location: Geolocation API + OSM Nominatim reverse geocoding          */
@@ -550,7 +556,7 @@ function renderThumbs() {
     `<div class="thumb ${p.stamped && p.lat != null ? 'stamped' : ''}" data-i="${i}" title="${esc(p.section ? SECTION_BY_ID[p.section].title : 'General')}"><img src="${p.dataUrl}" alt="photo ${i + 1}"><button class="x" data-i="${i}" title="Remove">✕</button><span class="sz">${p.section ? esc(SECTION_BY_ID[p.section].title.split(' ')[0]) : fmtBytes(p.bytes)}</span></div>`).join('');
   $$('#thumbStrip .x').forEach(b => b.onclick = e => { e.stopPropagation(); photos.splice(+b.dataset.i, 1); renderThumbs(); });
   $$('#thumbStrip .thumb').forEach(t => t.onclick = () => openGallery('Photos for this submission', photos));
-  $('#analyzeBtn').disabled = photos.length === 0;
+  updateAnalyzeBtn();
   $$('button[data-ai]').forEach(b => { const n = photos.filter(p => p.section === b.dataset.ai).length; const bd = $('.tool-badge', b); bd.textContent = n; bd.hidden = !n; b.classList.toggle('ready', n > 0); });
   // small thumbnails beside each section's tools, each with its own delete
   $$('[data-thumbs]').forEach(strip => {
@@ -565,6 +571,93 @@ function openGallery(title, list) {
   $('#photoDlgTitle').textContent = title;
   $('#photoDlgGallery').innerHTML = list.map((p, i) => `<figure><img src="${p.dataUrl}" alt="photo ${i + 1}"><figcaption>${esc(p.name || '')} · ${fmtDate(p.taken_at)}${p.lat != null ? ` · ${(+p.lat).toFixed(5)}, ${(+p.lon).toFixed(5)}` : ''}</figcaption></figure>`).join('');
   $('#photoDlg').showModal();
+}
+
+/* ------------------------------------------------------------------ */
+/* Voice: record the interview → live speech-to-text (Web Speech API, free, on-device/browser) →       */
+/* transcript feeds Analyze & fill. Fallback: MediaRecorder audio → Gemini transcription.                */
+/* ------------------------------------------------------------------ */
+let recording = false, recognizer = null, mediaRec = null, mediaChunks = [], recStart = 0, recTimer = null;
+let audioClips = []; // [{ dataUrl, mime, bytes, duration, taken_at, lat, lon }] — kept as evidence like the photos
+function fmtDur(s) { s = Math.round(s || 0); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
+function renderClips() {
+  const host = $('#audioClips'); if (!host) return;
+  host.innerHTML = audioClips.map((c, i) => `<div class="clip"><span class="clip-ic">🎙</span><span class="clip-meta">Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtBytes(c.bytes)}${c.lat != null ? ' · GPS' : ''}</span><audio controls preload="none" src="${c.dataUrl}"></audio><button type="button" class="icon-btn" data-clip="${i}" title="Delete clip">✕</button></div>`).join('');
+  $$('#audioClips [data-clip]').forEach(b => b.onclick = () => { if (confirm('Delete this recording?')) { audioClips.splice(+b.dataset.clip, 1); renderClips(); } });
+  host.hidden = !audioClips.length; if (audioClips.length) $('#transcriptWrap').hidden = false;
+}
+/** Start a low-bitrate MediaRecorder for the evidence clip (runs alongside live recognition when available). */
+async function startClip() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return false;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+    mediaChunks = []; mediaRec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 });
+    mediaRec.ondataavailable = e => { if (e.data.size) mediaChunks.push(e.data); };
+    mediaRec._stream = stream; mediaRec._start = Date.now(); mediaRec._fix = lastFix;
+    mediaRec.start(1000); return true;
+  } catch (e) { toast('Microphone unavailable for the audio clip: ' + e.message, 'err'); return false; }
+}
+function finishClip() {
+  return new Promise(res => {
+    if (!mediaRec || mediaRec.state === 'inactive') return res(null);
+    const rec = mediaRec; mediaRec = null;
+    rec.onstop = () => {
+      rec._stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(mediaChunks, { type: rec.mimeType || 'audio/webm' });
+      if (blob.size < 1000) return res(null);
+      const fr = new FileReader();
+      fr.onload = () => { const clip = { dataUrl: fr.result, mime: blob.type.split(';')[0], bytes: blob.size, duration: (Date.now() - rec._start) / 1000, taken_at: new Date(rec._start).toISOString(), lat: rec._fix?.lat ?? null, lon: rec._fix?.lon ?? null }; audioClips.push(clip); renderClips(); res(clip); };
+      fr.readAsDataURL(blob);
+    };
+    rec.stop();
+  });
+}
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+function updateAnalyzeBtn() { const t = ($('#transcript')?.value || '').trim(); $('#analyzeBtn').disabled = photos.length === 0 && !t; }
+function setRecUI(on) {
+  const b = $('#recBtn'); b.classList.toggle('recording', on); b.querySelector('span').textContent = on ? 'Stop' : 'Record';
+  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => { const s = Math.round((Date.now() - recStart) / 1000); const st = $('#recStatus'); if (st.dataset.mode !== 'busy') setStatus(st, `● Recording ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')} — ${SpeechRec ? 'transcribing live' : 'audio will be transcribed by Gemini when you stop'}`, 'err'); }, 1000); }
+  else { clearInterval(recTimer); }
+}
+function appendTranscript(text) { const ta = $('#transcript'); const cur = ta.value.replace(/\s+$/, ''); ta.value = (cur ? cur + ' ' : '') + text.trim(); ta.scrollTop = ta.scrollHeight; updateAnalyzeBtn(); scheduleDraftSave(); }
+async function toggleRecording() { if (recording) stopRecording(); else await startRecording(); }
+async function startRecording() {
+  const st = $('#recStatus'); st.dataset.mode = '';
+  if (!SpeechRec && !settings.geminiKey) { openSettings(); return toast('This browser has no built-in speech recognition; add a Gemini API key so the recording can be transcribed', 'err'); }
+  const clipOk = await startClip(); // evidence recording (always attempted)
+  if (SpeechRec) {
+    try {
+      recognizer = new SpeechRec(); recognizer.lang = $('#recLang').value; recognizer.continuous = true; recognizer.interimResults = true; recognizer.maxAlternatives = 1;
+      let interim = '';
+      recognizer.onresult = e => { interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) appendTranscript(r[0].transcript); else interim += r[0].transcript; } if (interim) { st.dataset.mode = 'busy'; setStatus(st, '… ' + interim, ''); } else st.dataset.mode = ''; };
+      recognizer.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast('Microphone access denied — allow the microphone and try again', 'err'); stopRecording(); } else if (e.error === 'network') { toast('Speech service unavailable — check the connection (Chrome uses an online recognizer)', 'err'); } };
+      recognizer.onend = () => { if (recording) { try { recognizer.start(); } catch {} } }; // Chrome stops after silence: keep listening
+      recognizer.start(); recording = true; setRecUI(true); return;
+    } catch (e) { recognizer = null; }
+  }
+  // No browser speech engine: the clip is transcribed by Gemini when you stop
+  if (!clipOk) return toast('This browser has no speech recognition or audio recording — type the transcript instead', 'err');
+  recording = true; setRecUI(true);
+}
+async function transcribeClip(clip) {
+  const st = $('#recStatus');
+  setStatus(st, `Transcribing ${fmtDur(clip.duration)} of audio with Gemini…`, '', true);
+  try {
+    const lang = $('#recLang').selectedOptions[0]?.textContent || '';
+    const body = { contents: [{ role: 'user', parts: [{ text: `Transcribe this field-interview recording verbatim (language: ${lang}; keep numbers as digits; do not summarise). Return only the transcript text.` }, { inline_data: { mime_type: clip.mime, data: clip.dataUrl.split(',')[1] } }] }] };
+    let d = await geminiCall(settings.model, body); if (d.error) d = await geminiCall(GEMINI_FALLBACK, body); if (d.error) throw new Error(d.error.message);
+    const text = d.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || ''; if (!text.trim()) throw new Error('empty transcript');
+    appendTranscript(text); setStatus(st, 'Transcript added — review it, then Analyze & fill', 'ok');
+  } catch (e) { setStatus(st, 'Transcription failed: ' + e.message, 'err'); }
+}
+async function stopRecording() {
+  recording = false; setRecUI(false);
+  const hadRecognizer = !!recognizer;
+  if (recognizer) { try { recognizer.onend = null; recognizer.stop(); } catch {} recognizer = null; }
+  const clip = await finishClip();
+  if (hadRecognizer) setStatus($('#recStatus'), ($('#transcript').value.trim() ? `Transcript ready${clip ? ' · audio clip saved for reference' : ''} — edit if needed, then Analyze & fill` : 'Nothing was recognised — try again closer to the microphone'), 'ok');
+  else if (clip) await transcribeClip(clip);
 }
 
 /* ------------------------------------------------------------------ */
@@ -602,9 +695,9 @@ function updateEngineChip() {
   if (opt) opt.textContent = 'Chrome built-in AI (Gemini Nano, no key)' + (chromeAI ? (chromeAI === 'available' ? ' — ready' : ' — needs one-time download') : ' — not available in this browser');
 }
 
-function promptFor(fields, ctx, sectionTitle) {
+function promptFor(fields, ctx, sectionTitle, transcript = '') {
   const cat = fields.filter(f => f.options);
-  return `You are an assistant for a field enumerator conducting a household socio-economic survey. You will receive one or more photos of the same household. They may show: the outside or inside of a dwelling, household members, assets, livestock, farmland, water sources, toilets, kitchens, surroundings, a filled-in paper questionnaire, an ID/ration card, or other documents. Photos may carry a small semi-transparent stamp at the bottom-left with date, coordinates and address — you may use that address for location fields but otherwise ignore it.
+  return `You are an assistant for a field enumerator conducting a household socio-economic survey. You will receive ${transcript ? 'an interview transcript and possibly ' : ''}one or more photos of the same household. They may show: the outside or inside of a dwelling, household members, assets, livestock, farmland, water sources, toilets, kitchens, surroundings, a filled-in paper questionnaire, an ID/ration card, or other documents. Photos may carry a small semi-transparent stamp at the bottom-left with date, coordinates and address — you may use that address for location fields but otherwise ignore it.
 ${sectionTitle ? `\nFOCUS: fill only the "${sectionTitle}" section fields listed below, based on what these photos show.` : ''}
 Rules:
 - Use ONLY the allowed values for categorical fields; leave a field null if it cannot be determined.
@@ -613,7 +706,11 @@ Rules:
 - For multi-select fields return every option you can see. Include "None" only when clearly none of the listed items exist.
 - Never guess personal fields (name, age, religion, caste, income, phone) from appearance — only read them from documents.
 - ai_observations: 1–3 short sentences on what the photos show and which fields you inferred vs. read.
-${ctx ? `\nEnumerator hint: ${ctx}\n` : ''}
+${ctx ? `\nEnumerator hint: ${ctx}\n` : ''}${transcript ? `\nINTERVIEW TRANSCRIPT (spoken by the enumerator and/or respondent; it may be in any language or mixed languages — extract every answer that is stated, map it to the closest allowed value, and prefer the transcript over photos when they conflict):
+<<<
+${transcript}
+>>>
+` : ''}
 Fields and allowed values:
 ${cat.map(f => `- ${f.k}${f.type === 'multi' ? ' (multi-select)' : ''}: ${f.options.join(' | ')}`).join('\n')}
 ${fields.filter(f => !f.options).map(f => `- ${f.k}: ${f.type === 'number' ? 'integer' : 'text'}`).join('\n')}
@@ -727,13 +824,14 @@ let lastEngine = '';
 /** Analyze photos and fill fields. section = '' → whole questionnaire with all photos. */
 async function analyzePhotos(section = '', list = null) {
   list = list || (section ? photos.filter(p => p.section === section) : photos);
-  if (!list.length) return toast(section ? 'Capture or upload a photo for this section first (the boxes next to the AI icon)' : 'Add a photo first');
+  const transcript = ($('#transcript')?.value || '').trim();
+  if (!list.length && !transcript) return toast(section ? 'Capture a photo for this section first (the box next to the AI icon)' : 'Capture a photo or record the interview first');
   const st = section ? $(`[data-status="${section}"]`) : $('#aiStatus');
   const btn = $('#analyzeBtn');
   const engine = activeEngine();
   if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
   const fields = section ? [...SECTION_BY_ID[section].fields.filter(f => f.ai), ALL_FIELDS.find(f => f.k === 'ai_observations')] : AI_FIELDS;
-  const prompt = promptFor(fields, ($('#aiContext')?.value || '').trim(), section ? SECTION_BY_ID[section].title : '');
+  const prompt = promptFor(fields, ($('#aiContext')?.value || '').trim(), section ? SECTION_BY_ID[section].title : '', transcript);
   btn.disabled = true; $$('.sec-tools').forEach(l => l.classList.add('disabled'));
   const t0 = performance.now();
   const onStatus = m => setStatus(st, m, '', true);
@@ -748,13 +846,13 @@ async function analyzePhotos(section = '', list = null) {
     });
     lastEngine = engine === 'gemini' ? settings.model : engine === 'openrouter' ? 'openrouter:' + settings.orModel : 'chrome-builtin';
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
-    setStatus(st, `${n} field${n === 1 ? '' : 's'} filled in ${secs}s — highlighted in yellow, please review.`, 'ok');
+    setStatus(st, `${n} field${n === 1 ? '' : 's'} filled in ${secs}s from ${list.length ? `${list.length} photo(s)` : ''}${list.length && transcript ? ' + ' : ''}${transcript ? 'the transcript' : ''} — highlighted in yellow, please review.`, 'ok');
     toast(`${n} fields filled in ${secs}s`, 'ok');
     if (section) $(`[data-section="${section}"]`).classList.remove('collapsed'); else $$('.card.collapsed').forEach(c => c.classList.remove('collapsed'));
   } catch (e) {
     setStatus(st, 'AI error: ' + e.message, 'err'); toast('AI error: ' + e.message, 'err');
   } finally {
-    btn.disabled = photos.length === 0; $$('.sec-tools').forEach(l => l.classList.remove('disabled'));
+    updateAnalyzeBtn(); $$('.sec-tools').forEach(l => l.classList.remove('disabled'));
     scheduleDraftSave(); updateProgress();
   }
 }
@@ -783,10 +881,10 @@ async function submitForm() {
   const btn = $('#submitBtn'); btn.disabled = true;
   try {
     const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2);
-    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', ai_engine: lastEngine, app_version: APP_VERSION, status: 'pending' };
-    if (photos.length) {
-      try { rec.photo_thumb = await makeThumb(photos[0].dataUrl); } catch {}
-      await PhotoDB.put(id, photos.map(p => ({ name: p.name, section: p.section, dataUrl: p.dataUrl, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc })));
+    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', ai_engine: lastEngine, app_version: APP_VERSION, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
+    if (photos.length || audioClips.length) {
+      if (photos.length) { try { rec.photo_thumb = await makeThumb(photos[0].dataUrl); } catch {} }
+      await PhotoDB.put(id, photos.map(p => ({ name: p.name, section: p.section, dataUrl: p.dataUrl, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc })), audioClips.map((c, i) => ({ name: `audio_${i + 1}.${c.mime.includes('mp4') ? 'm4a' : c.mime.includes('ogg') ? 'ogg' : 'webm'}`, ...c })));
     }
     const records = getRecords(); records.unshift(rec); saveRecords(records);
     clearForm(); lastEngine = '';
@@ -797,6 +895,7 @@ async function submitForm() {
 async function sendRecord(rec) {
   const { status, error, ...payload } = rec;
   if (settings.uploadPhotos && rec.photo_count) payload.photos = await PhotoDB.get(rec.id);
+  if (settings.uploadPhotos && rec.audio_count) payload.audio = await PhotoDB.getAudio(rec.id);
   // text/plain avoids a CORS preflight; Apps Script answers through a redirect that fetch follows.
   const r = await fetch(settings.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
   const j = await r.json().catch(() => ({}));
@@ -813,7 +912,7 @@ async function syncPending() {
   syncing = true; $('#syncBtn').disabled = true;
   let ok = 0, fail = 0;
   for (const rec of pending) {
-    try { const j = await sendRecord(rec); rec.status = 'synced'; delete rec.error; if (j.photo_urls) rec.photo_urls = j.photo_urls; ok++; }
+    try { const j = await sendRecord(rec); rec.status = 'synced'; delete rec.error; if (j.photo_urls) rec.photo_urls = j.photo_urls; if (j.audio_urls) rec.audio_urls = j.audio_urls; ok++; }
     catch (e) { rec.status = 'failed'; rec.error = e.message; fail++; }
     saveRecords(records);
   }
@@ -829,12 +928,18 @@ function renderLocalTable() {
   const synced = records.filter(r => r.status === 'synced').length;
   $('#localSummary').textContent = records.length ? `${records.length} record(s) · ${synced} synced · ${records.length - synced} pending or failed. Stamped photos are kept on this device and uploaded to Drive on sync.` : 'No submissions on this device yet.';
   $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>` +
-    records.map(r => `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count ? `<button class="link-btn" data-dl="${r.id}">photos</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`).join('') + '</tbody>' : '';
+    records.map(r => `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count ? `<button class="link-btn" data-dl="${r.id}">photos</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`).join('') + '</tbody>' : '';
   $$('#localTable [data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Delete this record (and its photos) from the device?')) return;
     await PhotoDB.del(b.dataset.del); saveRecords(getRecords().filter(r => r.id !== b.dataset.del)); renderLocalTable();
   });
   $$('#localTable [data-view]').forEach(i => i.onclick = async () => openGallery('Stamped photos', await PhotoDB.get(i.dataset.view)));
+  $$('#localTable [data-audio]').forEach(b => b.onclick = async () => {
+    const clips = await PhotoDB.getAudio(b.dataset.audio);
+    $('#photoDlgTitle').textContent = 'Interview recordings';
+    $('#photoDlgGallery').innerHTML = clips.map((c, i) => `<figure class="audio-fig"><audio controls src="${c.dataUrl}"></audio><figcaption>Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtDate(c.taken_at)}${c.lat != null ? ` · ${(+c.lat).toFixed(5)}, ${(+c.lon).toFixed(5)}` : ''}</figcaption></figure>`).join('') || '<p class="dim">No clips stored.</p>';
+    $('#photoDlg').showModal();
+  });
   $$('#localTable [data-dl]').forEach(b => b.onclick = async () => {
     for (const p of await PhotoDB.get(b.dataset.dl)) { download(`${b.dataset.dl.slice(0, 8)}_${p.name}`, await (await fetch(p.dataUrl)).blob()); await new Promise(r => setTimeout(r, 300)); }
   });
@@ -969,6 +1074,11 @@ function init() {
   $('#locateBtn').onclick = () => detectLocation(false);
   $('#captureInput').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
   $('#analyzeBtn').onclick = () => analyzePhotos();
+  $('#recBtn').onclick = toggleRecording;
+  $('#recLang').value = settings.recLang || (navigator.language && navigator.language.includes('-') ? navigator.language : 'en-IN');
+  $('#recLang').onchange = e => { settings.recLang = e.target.value; LS.set('gs_settings', settings); };
+  $('#transcript').addEventListener('input', () => { updateAnalyzeBtn(); scheduleDraftSave(); });
+  $('#transcriptClear').onclick = () => { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; updateAnalyzeBtn(); };
   $('#submitBtn').onclick = submitForm;
   $('#resetBtn').onclick = () => { if (confirm('Clear the form?')) clearForm(); };
   $('#syncBtn').onclick = syncPending;

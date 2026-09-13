@@ -12,7 +12,7 @@
  *     Use ADMIN_TOKEN in the app's Admin tab to view / delete / export all data.
  *
  * Each submission = one row in "Responses" (new fields become new columns automatically).
- * Stamped photos are saved to the Drive folder PHOTO_FOLDER and their links written to "photo_urls".
+ * Stamped photos and interview recordings are saved to the Drive folder PHOTO_FOLDER; links go to "photo_urls" / "audio_urls".
  * Duplicate submission ids (offline re-sync) are ignored. Re-deploy after editing this file
  * (Deploy → Manage deployments → Edit → Version: New).
  */
@@ -63,15 +63,16 @@ function folder_() {
   var it = DriveApp.getFoldersByName(PHOTO_FOLDER);
   return it.hasNext() ? it.next() : DriveApp.createFolder(PHOTO_FOLDER);
 }
-function savePhotos_(id, photos) {
+function savePhotos_(id, photos, kind) {
   var folder = folder_(), urls = [];
   photos.forEach(function (p, i) {
     try {
       var b64 = String(p.dataUrl || '').split(',')[1];
       if (!b64) return;
-      var blob = Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', (id.slice(0, 8) + '_' + (p.name || ('photo_' + (i + 1) + '.jpg'))));
+      var mime = kind === 'audio' ? (p.mime || 'audio/webm') : 'image/jpeg';
+      var blob = Utilities.newBlob(Utilities.base64Decode(b64), mime, (id.slice(0, 8) + '_' + (p.name || ((kind === 'audio' ? 'audio_' : 'photo_') + (i + 1) + (kind === 'audio' ? '.webm' : '.jpg')))));
       var file = folder.createFile(blob);
-      file.setDescription(JSON.stringify({ record: id, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc, section: p.section || '' }));
+      file.setDescription(JSON.stringify({ record: id, kind: kind || 'photo', taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc, duration: p.duration, section: p.section || '' }));
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       urls.push('https://drive.google.com/file/d/' + file.getId() + '/view');
     } catch (e) { urls.push('ERROR: ' + e); }
@@ -94,7 +95,10 @@ function doPost(e) {
       if (ids.indexOf(String(data.id)) !== -1) return json_({ ok: true, id: data.id, duplicate: true });
     }
     var photos = data.photos || []; delete data.photos;
-    if (photos.length) data.photo_urls = savePhotos_(String(data.id || Utilities.getUuid()), photos).join('\n');
+    var audio = data.audio || []; delete data.audio;
+    var rid = String(data.id || Utilities.getUuid());
+    if (photos.length) data.photo_urls = savePhotos_(rid, photos, 'photo').join('\n');
+    if (audio.length) data.audio_urls = savePhotos_(rid, audio, 'audio').join('\n');
     data.received_at = new Date().toISOString();
 
     var added = false;
@@ -105,7 +109,7 @@ function doPost(e) {
       if (v === undefined || v === null) return '';
       return typeof v === 'object' ? JSON.stringify(v) : v;
     }));
-    return json_({ ok: true, id: data.id, row: sh.getLastRow(), photo_urls: data.photo_urls || '' });
+    return json_({ ok: true, id: data.id, row: sh.getLastRow(), photo_urls: data.photo_urls || '', audio_urls: data.audio_urls || '' });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {
