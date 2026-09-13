@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.10.4';
+const APP_VERSION = '1.11.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -207,7 +207,7 @@ function applySchema(schema, rerender = true) {
   CONSTRUCTS = deriveConstructs(SECTIONS, s.constructNames || {});
   STRUCTURAL_MODEL = deriveModel(CONSTRUCTS, s.model);
   ALL_FIELDS = [...LOCATION_FIELDS, ...SECTIONS.flatMap(x => x.fields), ...REMARKS_FIELDS];
-  AI_FIELDS = ALL_FIELDS.filter(f => f.ai);
+  AI_FIELDS = ALL_FIELDS.filter(f => f.ai || f.type === 'likert'); // rating scales are answered from the interview
   SECTION_BY_ID = Object.fromEntries(SECTIONS.map(x => [x.id, x]));
   if (rerender) {
     const keep = collect();
@@ -327,8 +327,8 @@ function renderForm() {
         ${s.photoHint ? `<div class="sec-tools">
           <div class="sec-thumbs" data-thumbs="${s.id}"></div>
           <label class="tool" title="Capture a photo for this section with the camera">${CAMERA_SVG}<input type="file" accept="image/*" capture="environment" data-sec="${s.id}" hidden></label>
-          <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
-        </div>` : ''}
+          <button type="button" class="tool tool-ai" data-ai="${s.id}" title="Analyze this section's photos and the recorded interview with AI and fill the fields">${AI_SVG}<span class="tool-badge" hidden>0</span></button>
+        </div>` : `<div class="sec-tools"><button type="button" class="tool tool-ai" data-ai="${s.id}" title="Fill this section from the recorded interview / transcript with AI">${AI_SVG}<span class="tool-badge" hidden>0</span></button></div>`}
       </div>
       ${s.photoHint ? `<p class="sub sec-hint">${esc(s.photoHint)}</p>` : `<p class="sub sec-hint">Ask the respondent to rate each statement on the scale shown.</p>`}
       <div class="status sec-status" data-status="${s.id}"></div>
@@ -372,7 +372,7 @@ function setValue(k, v, fromAI = false) {
     $$('input', el).forEach(i => { const on = vals.includes(i.value.toLowerCase()); i.checked = fromAI ? (i.checked || on) : on; hit = hit || on; });
     if (!hit) return false;
   } else if (el.classList.contains('likert')) {
-    const r = $(`input[value="${String(v).trim()}"]`, el); if (!r) return false; r.checked = true;
+    const n = Math.round(parseFloat(v)); const r = Number.isFinite(n) ? $(`input[value="${n}"]`, el) : null; if (!r) return false; r.checked = true;
   } else if (el.tagName === 'SELECT') {
     const norm = s => String(s).toLowerCase().replace(/\s+/g, ' ').trim();
     const opt = [...el.options].find(o => o.value && norm(o.value) === norm(v));
@@ -557,7 +557,7 @@ function renderThumbs() {
   $$('#thumbStrip .x').forEach(b => b.onclick = e => { e.stopPropagation(); photos.splice(+b.dataset.i, 1); renderThumbs(); });
   $$('#thumbStrip .thumb').forEach(t => t.onclick = () => openGallery('Photos for this submission', photos));
   updateAnalyzeBtn();
-  $$('button[data-ai]').forEach(b => { const n = photos.filter(p => p.section === b.dataset.ai).length; const bd = $('.tool-badge', b); bd.textContent = n; bd.hidden = !n; b.classList.toggle('ready', n > 0); });
+  $$('button[data-ai]').forEach(b => { const n = photos.filter(p => p.section === b.dataset.ai).length; const bd = $('.tool-badge', b); bd.textContent = n; bd.hidden = !n; b.classList.toggle('ready', n > 0 || (audioClips.length > 0 && !SECTION_BY_ID[b.dataset.ai]?.photoHint)); });
   // small thumbnails beside each section's tools, each with its own delete
   $$('[data-thumbs]').forEach(strip => {
     const sec = strip.dataset.thumbs;
@@ -694,7 +694,9 @@ ${transcript}
 ` : ''}
 Fields and allowed values:
 ${cat.map(f => `- ${f.k}${f.type === 'multi' ? ' (multi-select)' : ''}: ${f.options.join(' | ')}`).join('\n')}
-${fields.filter(f => !f.options).map(f => `- ${f.k}: ${f.type === 'number' ? 'integer' : 'text'}`).join('\n')}
+${fields.filter(f => !f.options && f.type !== 'likert').map(f => `- ${f.k}: ${f.type === 'number' ? 'integer' : 'text'}`).join('\n')}
+${fields.filter(f => f.type === 'likert').map(f => { const sc = scaleOf(f); return `- ${f.k}: rating 1–${sc.max} (1 = ${sc.lo}, ${sc.max} = ${sc.hi}) for the statement "${f.label}"`; }).join('\n')}
+${fields.some(f => f.type === 'likert') ? `Rating statements: give the integer only when the interview (or a filled form in a photo) indicates the respondent's view — map words to the scale (e.g. "strongly agree / very satisfied" = highest, "agree / mostly" = second highest, "neutral / somewhat" = middle, "disagree" = second lowest, "strongly disagree / not at all" = lowest). Never invent ratings.` : ''}
 Respond with a single JSON object using these field keys only.`;
 }
 function geminiSchema(fields, withTranscript = false) {
@@ -703,7 +705,7 @@ function geminiSchema(fields, withTranscript = false) {
   fields.forEach(f => {
     if (f.type === 'select') props[f.k] = { type: 'STRING', enum: f.options, nullable: true };
     else if (f.type === 'multi') props[f.k] = { type: 'ARRAY', items: { type: 'STRING', enum: f.options }, nullable: true };
-    else if (f.type === 'number') props[f.k] = { type: 'INTEGER', nullable: true };
+    else if (f.type === 'number' || f.type === 'likert') props[f.k] = { type: 'INTEGER', nullable: true };
     else props[f.k] = { type: 'STRING', nullable: true };
   });
   return { type: 'OBJECT', properties: props };
@@ -713,7 +715,7 @@ function jsonSchema(fields) {
   fields.forEach(f => {
     if (f.type === 'select') props[f.k] = { type: ['string', 'null'], enum: [...f.options, null] };
     else if (f.type === 'multi') props[f.k] = { type: ['array', 'null'], items: { type: 'string', enum: f.options } };
-    else if (f.type === 'number') props[f.k] = { type: ['integer', 'null'] };
+    else if (f.type === 'number' || f.type === 'likert') props[f.k] = { type: ['integer', 'null'] };
     else props[f.k] = { type: ['string', 'null'] };
   });
   return { type: 'object', properties: props, required: Object.keys(props), additionalProperties: false };
@@ -808,14 +810,14 @@ async function analyzePhotos(section = '', list = null) {
   list = list || (section ? photos.filter(p => p.section === section) : photos);
   const transcript = ($('#transcript')?.value || '').trim();
   let audio = audioClips.slice();
-  if (!list.length && !transcript && !audio.length) return toast(section ? 'Capture a photo for this section first (the box next to the AI icon)' : 'Capture a photo or record the interview first');
+  if (!list.length && !transcript && !audio.length) return toast(section ? 'Capture a photo for this section or record the interview first' : 'Capture a photo or record the interview first');
   const st = section ? $(`[data-status="${section}"]`) : $('#aiStatus');
   const btn = $('#analyzeBtn');
   const engine = activeEngine();
   if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
   if (audio.length && engine !== 'gemini') { toast('Audio analysis needs Gemini — using the typed transcript only'); audio = []; }
   const budget = 18e6 - list.reduce((s, p) => s + p.bytes, 0); let acc = 0; audio = audio.filter(c => (acc += c.bytes) < budget); // stay under the 20 MB request limit
-  const fields = section ? [...SECTION_BY_ID[section].fields.filter(f => f.ai), ALL_FIELDS.find(f => f.k === 'ai_observations')] : AI_FIELDS;
+  const fields = section ? [...SECTION_BY_ID[section].fields.filter(f => f.ai || f.type === 'likert'), ALL_FIELDS.find(f => f.k === 'ai_observations')] : AI_FIELDS;
   const prompt = promptFor(fields, ($('#aiContext')?.value || '').trim(), section ? SECTION_BY_ID[section].title : '', transcript, audio.length);
   btn.disabled = true; $$('.sec-tools').forEach(l => l.classList.add('disabled'));
   const t0 = performance.now();
