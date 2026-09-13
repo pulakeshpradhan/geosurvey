@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -215,13 +215,14 @@ function applySchema(schema, rerender = true) {
     Object.entries(keep).forEach(([k, v]) => setValue(k, v));
     renderThumbs(); updateProgress();
     if (typeof Analysis !== 'undefined') Analysis.schedule();
+    if (SECTIONS.length && !getValue('latitude')) autoLocate();
   }
 }
 let FORM_META = { title: 'Socio-Economic Household Survey', description: '' };
 function currentSchema() { return { version: (LS.get('gs_schema', null) || {}).version || 1, title: FORM_META.title, description: FORM_META.description, sections: clone(SECTIONS), remarks: clone(REMARKS_FIELDS), constructNames: Object.fromEntries(Object.entries(CONSTRUCTS).map(([k, c]) => [k, c.name])), model: clone(STRUCTURAL_MODEL) }; }
 applySchema(LS.get('gs_schema', null) || EMPTY_SCHEMA, false);
 /** Install the built-in sample questionnaire (18 Likert items, 5 constructs, structural model). */
-function useSampleQuestionnaire() { const d = clone(DEFAULT_SCHEMA); d.version = Date.now(); LS.set('gs_schema', d); applySchema(d); toast('Sample questionnaire installed — customise it any time in Edit', 'ok'); }
+function useSampleQuestionnaire() { const d = clone(DEFAULT_SCHEMA); d.version = Date.now(); LS.set('gs_schema', d); applySchema(d); toast('Sample questionnaire installed — customise it any time in Edit', 'ok'); autoLocate(); }
 // Columns that exist on a record but are not questionnaire fields (used by exports)
 const META_FIELDS = [
   { k: 'id', label: 'Record ID', type: 'text' }, { k: 'submitted_at', label: 'Submitted at', type: 'text' },
@@ -409,6 +410,7 @@ function clearForm() {
   $$('.sec-status').forEach(s => setStatus(s, ''));
   LS.set('gs_draft', null);
   updateProgress();
+  autoLocate(true); // next household: fresh precise fix
 }
 function updateProgress() {
   const fields = ALL_FIELDS.filter(f => !f.ro && !['ai_observations', 'remarks', 'full_address'].includes(f.k));
@@ -446,7 +448,53 @@ async function reverseGeocode(lat, lon) {
 }
 function placeLabel(p) { return p ? [p.village, p.district, p.state, p.postcode].filter(Boolean).join(', ') : ''; }
 
-async function detectLocation(silent = false) {
+/* Automatic precise location (like delivery apps): start a high-accuracy watch on open / new record / foreground,
+ * keep the best fix, refine until ≤ GOOD_ACC m or the time budget ends, then reverse-geocode. No button needed. */
+const GOOD_ACC = 15, LOCATE_BUDGET_MS = 25000;
+let watchId = null, watchTimer = null, geocodedAt = null, locating = false;
+function distanceM(a, b) { const R = 6371000, toR = x => x * Math.PI / 180; const dLat = toR(b.lat - a.lat), dLon = toR(b.lon - a.lon); const s = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLon / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(s)); }
+function applyFix(fix) {
+  setValue('latitude', fix.lat.toFixed(6)); setValue('longitude', fix.lon.toFixed(6)); setValue('gps_accuracy_m', Math.round(fix.acc));
+  if (fix.alt != null) setValue('altitude_m', Math.round(fix.alt));
+}
+function stopLocating() { if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; } clearTimeout(watchTimer); locating = false; $('#locateBtn').disabled = false; }
+async function finishLocating() {
+  stopLocating();
+  const st = $('#locStatus'); if (!lastFix) return;
+  const moved = !geocodedAt || distanceM(geocodedAt, lastFix) > 40;
+  if (moved && navigator.onLine) {
+    setStatus(st, `GPS ±${Math.round(lastFix.acc)} m · looking up address…`, '', true);
+    try { lastFix.place = await reverseGeocode(lastFix.lat, lastFix.lon); geocodedAt = { lat: lastFix.lat, lon: lastFix.lon }; Object.entries(lastFix.place).forEach(([k, v]) => setValue(k, v)); }
+    catch { /* keep coordinates; address can be retried with Refresh */ }
+  } else if (!moved && lastFix.place) Object.entries(lastFix.place).forEach(([k, v]) => { if (!getValue(k)) setValue(k, v); });
+  st.className = 'status ok';
+  st.innerHTML = `${lastFix.place ? esc(placeLabel(lastFix.place)) + ' · ' : ''}±${Math.round(lastFix.acc)} m${lastFix.acc > GOOD_ACC ? ' (best available)' : ''} · <a href="https://www.openstreetmap.org/?mlat=${lastFix.lat}&mlon=${lastFix.lon}#map=17/${lastFix.lat}/${lastFix.lon}" target="_blank" rel="noopener">map</a>`;
+  scheduleDraftSave(); updateProgress();
+}
+function autoLocate(force = false) {
+  if (!navigator.geolocation || !SECTIONS.length) return;
+  if (locating) return;
+  if (!force && lastFix && Date.now() - lastFix.time < 120000 && lastFix.acc <= GOOD_ACC && getValue('latitude')) return; // fresh & precise already
+  const st = $('#locStatus'); locating = true; $('#locateBtn').disabled = true;
+  setStatus(st, 'Locating… waiting for GPS', '', true);
+  let best = force ? null : lastFix;
+  watchId = navigator.geolocation.watchPosition(pos => {
+    const { latitude, longitude, accuracy, altitude } = pos.coords;
+    const fix = { lat: latitude, lon: longitude, acc: accuracy, alt: altitude, time: Date.now(), place: lastFix?.place || null };
+    if (!best || accuracy <= best.acc || Date.now() - best.time > 60000) { best = fix; lastFix = fix; applyFix(fix); }
+    setStatus(st, `Locating… ±${Math.round(accuracy)} m${accuracy > GOOD_ACC ? ' — improving' : ''}`, '', true);
+    if (accuracy <= GOOD_ACC) finishLocating();
+  }, err => {
+    if (err.code !== 1 && best) return finishLocating(); // transient GPS hiccup after a fix: keep the best position
+    stopLocating();
+    setStatus(st, err.code === 1 ? 'Location permission denied — allow location for this site, then tap Refresh.' : (err.code === 3 ? 'GPS timed out — move to open sky and tap Refresh.' : 'Location unavailable — tap Refresh.'), 'err');
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: LOCATE_BUDGET_MS });
+  watchTimer = setTimeout(() => { if (locating) { if (lastFix) finishLocating(); else { stopLocating(); setStatus(st, 'No GPS fix yet — move to open sky and tap Refresh.', 'err'); } } }, LOCATE_BUDGET_MS);
+}
+
+
+async function detectLocation(silent = false) { autoLocate(true); return lastFix; }
+async function detectLocationLegacy(silent = false) {
   const st = $('#locStatus');
   if (!silent) { setStatus(st, 'Getting GPS fix…', '', true); $('#locateBtn').disabled = true; }
   try {
@@ -516,7 +564,7 @@ async function makeThumb(dataUrl, maxDim = 320) { const c = await compressImage(
 function fmtBytes(b) { return b > 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB'; }
 
 async function currentFix() {
-  if (lastFix && Date.now() - lastFix.time < 120000) return lastFix; // reuse a fresh fix
+  if (lastFix && (locating || Date.now() - lastFix.time < 120000)) return lastFix; // reuse the live / fresh fix
   try {
     const pos = await getPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
     lastFix = { lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, alt: pos.coords.altitude, time: Date.now(), place: lastFix?.place || null };
@@ -1044,6 +1092,8 @@ function init() {
   setValue('survey_date', new Date().toISOString().slice(0, 10));
   if (settings.surveyor) setValue('surveyor', settings.surveyor);
   restoreDraft(); updateProgress(); updatePendingBadge(); updateEngineChip(); detectChromeAI();
+  autoLocate();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#formView').hidden && (!lastFix || Date.now() - lastFix.time > 300000)) autoLocate(); });
 
   $$('.tab').forEach(t => t.onclick = () => showView(t.dataset.view));
   $('#editBtn').onclick = () => showView('editView');
