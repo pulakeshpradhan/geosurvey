@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.14.1';
+const APP_VERSION = '1.14.2';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -227,7 +227,7 @@ function useSampleQuestionnaire() { const d = clone(DEFAULT_SCHEMA); d.version =
 const META_FIELDS = [
   { k: 'id', label: 'Record ID', type: 'text' }, { k: 'submitted_at', label: 'Submitted at', type: 'text' },
   { k: 'photo_count', label: 'Photo count', type: 'number' }, { k: 'photo_urls', label: 'Photo URLs', type: 'text' },
-  { k: 'ai_engine', label: 'AI engine used', type: 'text' }, { k: 'app_version', label: 'App version', type: 'text' },
+  { k: 'app_version', label: 'App version', type: 'text' },
   { k: 'interview_transcript', label: 'Interview transcript', type: 'text' },
   { k: 'audio_count', label: 'Audio clips', type: 'number' }, { k: 'audio_duration_s', label: 'Audio duration (s)', type: 'number' }, { k: 'audio_urls', label: 'Audio URLs', type: 'text' }, { k: 'transcript_url', label: 'Transcript URL', type: 'text' },
 ];
@@ -940,7 +940,7 @@ async function submitForm() {
   const btn = $('#submitBtn'); btn.disabled = true;
   try {
     const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2);
-    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', ai_engine: lastEngine, app_version: APP_VERSION, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
+    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', app_version: APP_VERSION, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
     if (photos.length || audioClips.length) {
       if (photos.length) { try { rec.photo_thumb = await makeThumb(photos[0].dataUrl); } catch {} }
       await PhotoDB.put(id, photos.map(p => ({ name: p.name, section: p.section, dataUrl: p.dataUrl, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc })), audioClips.map((c, i) => ({ name: `audio_${i + 1}${c.section ? '_' + c.section : ''}.${c.mime.includes('mp4') ? 'm4a' : c.mime.includes('ogg') ? 'ogg' : 'webm'}`, ...c })));
@@ -1026,7 +1026,7 @@ async function syncPending() {
   if (fail) toast(`${fail} record(s) failed to sync — check endpoint / connection`, 'err');
 }
 
-const TABLE_COLS = ['submitted_at', 'head_name', 'village', 'district', 'postcode', 'house_type', 'monthly_income', 'household_size', 'latitude', 'longitude', 'surveyor', 'ai_engine'];
+const TABLE_COLS = ['submitted_at', 'head_name', 'village', 'district', 'postcode', 'house_type', 'monthly_income', 'household_size', 'latitude', 'longitude', 'surveyor'];
 function renderLocalTable() {
   const records = getRecords();
   const synced = records.filter(r => r.status === 'synced').length;
