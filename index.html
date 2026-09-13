@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.10.1">
+  <link rel="stylesheet" href="styles.css?v=1.10.2">
 </head>
 <body>
   <header class="topbar">
@@ -65,6 +65,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></svg>
             <span>Record</span>
           </button>
+          <select id="recLang" class="input rec-lang" title="Language spoken in the interview (helps transcription)">
+            <option value="">Auto-detect language</option>
+            <option value="Hindi">हिन्दी · Hindi</option><option value="Bengali">বাংলা · Bengali</option><option value="Telugu">తెలుగు · Telugu</option><option value="Marathi">मराठी · Marathi</option><option value="Tamil">தமிழ் · Tamil</option><option value="Gujarati">ગુજરાતી · Gujarati</option><option value="Urdu">اردو · Urdu</option><option value="Kannada">ಕನ್ನಡ · Kannada</option><option value="Odia">ଓଡ଼ିଆ · Odia</option><option value="Malayalam">മലയാളം · Malayalam</option><option value="Punjabi">ਪੰਜਾਬੀ · Punjabi</option><option value="Assamese">অসমীয়া · Assamese</option><option value="Maithili">मैथिली · Maithili</option><option value="Santali">ᱥᱟᱱᱛᱟᱲᱤ · Santali</option><option value="Kashmiri">کٲشُر · Kashmiri</option><option value="Nepali">नेपाली · Nepali</option><option value="Sindhi">سنڌي · Sindhi</option><option value="Konkani">कोंकणी · Konkani</option><option value="Dogri">डोगरी · Dogri</option><option value="Manipuri (Meitei)">ꯃꯤꯇꯩꯂꯣꯟ · Manipuri</option><option value="Bodo">बड़ो · Bodo</option><option value="Sanskrit">संस्कृतम् · Sanskrit</option><option value="Bhojpuri">भोजपुरी · Bhojpuri</option><option value="Rajasthani">राजस्थानी · Rajasthani</option><option value="Chhattisgarhi">छत्तीसगढ़ी · Chhattisgarhi</option><option value="Tulu">ತುಳು · Tulu</option><option value="Indian English">English (India)</option>
+          </select>
           <span class="photo-count" id="photoCount"></span>
           <button id="analyzeBtn" class="btn btn-primary" disabled>Analyze &amp; fill</button>
         </div>
@@ -300,11 +304,11 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=1.10.1"></script>
-  <script src="sav.js?v=1.10.1"></script>
-  <script src="exports.js?v=1.10.1"></script>
-  <script src="analysis.js?v=1.10.1"></script>
-  <script src="pdf.js?v=1.10.1"></script>
-  <script src="designer.js?v=1.10.1"></script>
+  <script src="app.js?v=1.10.2"></script>
+  <script src="sav.js?v=1.10.2"></script>
+  <script src="exports.js?v=1.10.2"></script>
+  <script src="analysis.js?v=1.10.2"></script>
+  <script src="pdf.js?v=1.10.2"></script>
+  <script src="designer.js?v=1.10.2"></script>
 </body>
 </html>

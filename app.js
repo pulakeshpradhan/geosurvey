@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.10.2';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -591,7 +591,7 @@ function renderClips() {
 }
 function setRecUI(on) {
   const b = $('#recBtn'); b.classList.toggle('recording', on); b.querySelector('span').textContent = on ? 'Stop' : 'Record';
-  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => setStatus($('#recStatus'), `● Recording ${fmtDur((Date.now() - recStart) / 1000)} — speak in any language; press Stop when done`, 'err'), 1000); }
+  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => setStatus($('#recStatus'), `● Recording ${fmtDur((Date.now() - recStart) / 1000)} — ${$('#recLang').value || 'any Indian language'}; press Stop when done`, 'err'), 1000); }
   else clearInterval(recTimer);
 }
 function appendTranscript(text) { const ta = $('#transcript'); const cur = ta.value.replace(/\s+$/, ''); ta.value = (cur ? cur + '\n' : '') + text.trim(); ta.scrollTop = ta.scrollHeight; $('#transcriptWrap').hidden = false; updateAnalyzeBtn(); scheduleDraftSave(); }
@@ -627,12 +627,13 @@ async function stopRecording() {
   const clip = await finishClip();
   setStatus($('#recStatus'), clip ? `Clip ${audioClips.length} saved (${fmtDur(clip.duration)}). Press Analyze & fill — Gemini listens to the recording${photos.length ? ' and looks at the photos' : ''}, transcribes it and fills the form.` : 'Nothing was recorded — check the microphone permission and try again', clip ? 'ok' : 'err');
 }
-const AUDIO_PROMPT = 'Transcribe this field-interview recording verbatim. Detect the language automatically (it may be Bengali, Hindi, English or another language, possibly mixed); write the transcript in the language and script actually spoken, keep numbers as digits, do not summarise or translate. Return only the transcript text.';
+function langHint() { const l = $('#recLang')?.value || ''; return l ? `The interview is spoken in ${l} (it may mix in Hindi or English words); transcribe in ${l} using its native script` : 'Detect the language automatically (an Indian language, Hindi or English, possibly mixed); transcribe in the language and script actually spoken'; }
+const AUDIO_PROMPT = () => `Transcribe this field-interview recording verbatim. ${langHint()}; keep numbers as digits, do not summarise or translate. Return only the transcript text.`;
 async function transcribeClip(clip) {
   const st = $('#recStatus');
   setStatus(st, `Transcribing ${fmtDur(clip.duration)} of audio with Gemini…`, '', true);
   try {
-    const body = { contents: [{ role: 'user', parts: [{ text: AUDIO_PROMPT }, { inline_data: { mime_type: clip.mime, data: clip.dataUrl.split(',')[1] } }] }] };
+    const body = { contents: [{ role: 'user', parts: [{ text: AUDIO_PROMPT() }, { inline_data: { mime_type: clip.mime, data: clip.dataUrl.split(',')[1] } }] }] };
     let d = await geminiCall(settings.model, body); if (d.error) d = await geminiCall(GEMINI_FALLBACK, body); if (d.error) throw new Error(d.error.message);
     const text = d.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || ''; if (!text.trim()) throw new Error('empty transcript (was anything said?)');
     appendTranscript(text); setStatus(st, `Transcribed ${fmtDur(clip.duration)} of audio — review it, then Analyze & fill`, 'ok'); toast('Transcript ready', 'ok');
@@ -676,7 +677,7 @@ function updateEngineChip() {
 
 function promptFor(fields, ctx, sectionTitle, transcript = '', nAudio = 0) {
   const cat = fields.filter(f => f.options);
-  return `You are an assistant for a field enumerator conducting a household socio-economic survey. You will receive ${nAudio ? `${nAudio} audio recording(s) of the interview${transcript ? ', a transcript' : ''} and possibly ` : transcript ? 'an interview transcript and possibly ' : ''}one or more photos of the same household.${nAudio ? `\nAUDIO: listen to the recording(s) carefully; detect the language automatically (Bengali, Hindi, English or others, possibly mixed). Extract every answer the respondent or enumerator states and map it to the closest allowed value; prefer spoken answers over photos when they conflict. Also return "interview_transcript": a verbatim transcript of the recording(s) in the language and script spoken (numbers as digits, no summary).` : ''} They may show: the outside or inside of a dwelling, household members, assets, livestock, farmland, water sources, toilets, kitchens, surroundings, a filled-in paper questionnaire, an ID/ration card, or other documents. Photos may carry a small semi-transparent stamp at the bottom-left with date, coordinates and address — you may use that address for location fields but otherwise ignore it.
+  return `You are an assistant for a field enumerator conducting a household socio-economic survey. You will receive ${nAudio ? `${nAudio} audio recording(s) of the interview${transcript ? ', a transcript' : ''} and possibly ` : transcript ? 'an interview transcript and possibly ' : ''}one or more photos of the same household.${nAudio ? `\nAUDIO: listen to the recording(s) carefully. ${langHint()}. Extract every answer the respondent or enumerator states and map it to the closest allowed value; prefer spoken answers over photos when they conflict. Also return "interview_transcript": a verbatim transcript of the recording(s) in the language and script spoken (numbers as digits, no summary).` : ''} They may show: the outside or inside of a dwelling, household members, assets, livestock, farmland, water sources, toilets, kitchens, surroundings, a filled-in paper questionnaire, an ID/ration card, or other documents. Photos may carry a small semi-transparent stamp at the bottom-left with date, coordinates and address — you may use that address for location fields but otherwise ignore it.
 ${sectionTitle ? `\nFOCUS: fill only the "${sectionTitle}" section fields listed below, based on what these photos show.` : ''}
 Rules:
 - Use ONLY the allowed values for categorical fields; leave a field null if it cannot be determined.
@@ -1063,6 +1064,7 @@ function init() {
   $('#analyzeBtn').onclick = () => analyzePhotos();
   $('#recBtn').onclick = toggleRecording;
   $('#transcript').addEventListener('input', () => { $('#transcript').dataset.auto = '0'; updateAnalyzeBtn(); scheduleDraftSave(); });
+  $('#recLang').value = settings.recLang || ''; $('#recLang').onchange = e => { settings.recLang = e.target.value; LS.set('gs_settings', settings); };
   $('#transcriptClear').onclick = () => { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; updateAnalyzeBtn(); };
   $('#submitBtn').onclick = submitForm;
   $('#resetBtn').onclick = () => { if (confirm('Clear the form?')) clearForm(); };
