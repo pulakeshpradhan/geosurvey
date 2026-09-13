@@ -129,7 +129,6 @@ const PdfExport = (() => {
       // Standard PDF fonts cannot render non-Latin scripts: print what is representable and say where the full text lives
       const latin = clean(transcript); const dropped = transcript.length && latin.replace(/\s/g, '').length < transcript.replace(/\s/g, '').length * 0.6;
       paragraph('Transcript (verbatim)', dropped ? '[Transcript is in a non-Latin script; the full text is stored with the record, in the exports and on Drive]' + (latin.trim() ? ' ' + latin : '') : (transcript || '-'));
-      const translation = ($('#translation')?.textContent || '').trim(); if (translation) paragraph('English translation', translation);
     }
 
     // Photos
