@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.10.2';
+const APP_VERSION = '1.10.3';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -591,7 +591,7 @@ function renderClips() {
 }
 function setRecUI(on) {
   const b = $('#recBtn'); b.classList.toggle('recording', on); b.querySelector('span').textContent = on ? 'Stop' : 'Record';
-  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => setStatus($('#recStatus'), `● Recording ${fmtDur((Date.now() - recStart) / 1000)} — ${$('#recLang').value || 'any Indian language'}; press Stop when done`, 'err'), 1000); }
+  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => setStatus($('#recStatus'), `● Recording ${fmtDur((Date.now() - recStart) / 1000)} — ${settings.recLang || 'any Indian language'}; press Stop when done`, 'err'), 1000); }
   else clearInterval(recTimer);
 }
 function appendTranscript(text) { const ta = $('#transcript'); const cur = ta.value.replace(/\s+$/, ''); ta.value = (cur ? cur + '\n' : '') + text.trim(); ta.scrollTop = ta.scrollHeight; $('#transcriptWrap').hidden = false; updateAnalyzeBtn(); scheduleDraftSave(); }
@@ -627,7 +627,7 @@ async function stopRecording() {
   const clip = await finishClip();
   setStatus($('#recStatus'), clip ? `Clip ${audioClips.length} saved (${fmtDur(clip.duration)}). Press Analyze & fill — Gemini listens to the recording${photos.length ? ' and looks at the photos' : ''}, transcribes it and fills the form.` : 'Nothing was recorded — check the microphone permission and try again', clip ? 'ok' : 'err');
 }
-function langHint() { const l = $('#recLang')?.value || ''; return l ? `The interview is spoken in ${l} (it may mix in Hindi or English words); transcribe in ${l} using its native script` : 'Detect the language automatically (an Indian language, Hindi or English, possibly mixed); transcribe in the language and script actually spoken'; }
+function langHint() { const l = settings.recLang || ''; return l ? `The interview is spoken in ${l} (it may mix in Hindi or English words); transcribe in ${l} using its native script` : 'Detect the language automatically (an Indian language, Hindi or English, possibly mixed); transcribe in the language and script actually spoken'; }
 const AUDIO_PROMPT = () => `Transcribe this field-interview recording verbatim. ${langHint()}; keep numbers as digits, do not summarise or translate. Return only the transcript text.`;
 async function transcribeClip(clip) {
   const st = $('#recStatus');
@@ -1003,7 +1003,7 @@ function openSettings() {
   const known = KNOWN_MODELS.includes(settings.model);
   $('#setModel').value = known ? settings.model : 'custom'; $('#setModelCustom').hidden = known; $('#setModelCustom').value = known ? '' : settings.model;
   $('#setEndpoint').value = settings.endpoint; $('#setSurveyor').value = settings.surveyor;
-  $('#setMaxDim').value = settings.maxDim; $('#setStamp').checked = settings.stamp; $('#setUploadPhotos').checked = settings.uploadPhotos; $('#setSampleTools').checked = settings.sampleTools;
+  $('#setMaxDim').value = settings.maxDim; $('#setRecLang').value = settings.recLang || ''; $('#setStamp').checked = settings.stamp; $('#setUploadPhotos').checked = settings.uploadPhotos; $('#setSampleTools').checked = settings.sampleTools;
   $('#settingsDlg').showModal();
 }
 function saveSettings(quiet = false) {
@@ -1013,7 +1013,7 @@ function saveSettings(quiet = false) {
     model: modelSel === 'custom' ? ($('#setModelCustom').value.trim() || DEFAULT_SETTINGS.model) : modelSel,
     orKey: $('#setOrKey').value.trim(), orModel: $('#setOrModel').value.trim() || DEFAULT_SETTINGS.orModel,
     endpoint: $('#setEndpoint').value.trim(), surveyor: $('#setSurveyor').value.trim(),
-    maxDim: +$('#setMaxDim').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
+    maxDim: +$('#setMaxDim').value, recLang: $('#setRecLang').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
   };
   if (quiet) return; // dry run for the connection test
   LS.set('gs_settings', settings);
@@ -1064,7 +1064,6 @@ function init() {
   $('#analyzeBtn').onclick = () => analyzePhotos();
   $('#recBtn').onclick = toggleRecording;
   $('#transcript').addEventListener('input', () => { $('#transcript').dataset.auto = '0'; updateAnalyzeBtn(); scheduleDraftSave(); });
-  $('#recLang').value = settings.recLang || ''; $('#recLang').onchange = e => { settings.recLang = e.target.value; LS.set('gs_settings', settings); };
   $('#transcriptClear').onclick = () => { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; updateAnalyzeBtn(); };
   $('#submitBtn').onclick = submitForm;
   $('#resetBtn').onclick = () => { if (confirm('Clear the form?')) clearForm(); };
