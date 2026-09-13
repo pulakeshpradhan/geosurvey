@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.9.1';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -579,11 +579,13 @@ function openGallery(title, list) {
 /* ------------------------------------------------------------------ */
 let recording = false, recognizer = null, mediaRec = null, mediaChunks = [], recStart = 0, recTimer = null;
 let audioClips = []; // [{ dataUrl, mime, bytes, duration, taken_at, lat, lon }] — kept as evidence like the photos
+let liveFailed = false, liveGotText = false; // Web Speech availability during the current recording
 function fmtDur(s) { s = Math.round(s || 0); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
 function renderClips() {
   const host = $('#audioClips'); if (!host) return;
-  host.innerHTML = audioClips.map((c, i) => `<div class="clip"><span class="clip-ic">🎙</span><span class="clip-meta">Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtBytes(c.bytes)}${c.lat != null ? ' · GPS' : ''}</span><audio controls preload="none" src="${c.dataUrl}"></audio><button type="button" class="icon-btn" data-clip="${i}" title="Delete clip">✕</button></div>`).join('');
+  host.innerHTML = audioClips.map((c, i) => `<div class="clip"><span class="clip-ic">🎙</span><span class="clip-meta">Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtBytes(c.bytes)}${c.lat != null ? ' · GPS' : ''}</span><audio controls preload="none" src="${c.dataUrl}"></audio><button type="button" class="link-btn" data-tx="${i}" title="Transcribe this clip with Gemini">Transcribe</button><button type="button" class="icon-btn" data-clip="${i}" title="Delete clip">✕</button></div>`).join('');
   $$('#audioClips [data-clip]').forEach(b => b.onclick = () => { if (confirm('Delete this recording?')) { audioClips.splice(+b.dataset.clip, 1); renderClips(); } });
+  $$('#audioClips [data-tx]').forEach(b => b.onclick = async () => { if (!settings.geminiKey) { openSettings(); return toast('Add a Gemini API key to transcribe audio', 'err'); } b.disabled = true; try { await transcribeClip(audioClips[+b.dataset.tx]); } finally { b.disabled = false; } });
   host.hidden = !audioClips.length; if (audioClips.length) $('#transcriptWrap').hidden = false;
 }
 /** Start a low-bitrate MediaRecorder for the evidence clip (runs alongside live recognition when available). */
@@ -617,7 +619,7 @@ const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || 
 function updateAnalyzeBtn() { const t = ($('#transcript')?.value || '').trim(); $('#analyzeBtn').disabled = photos.length === 0 && !t; }
 function setRecUI(on) {
   const b = $('#recBtn'); b.classList.toggle('recording', on); b.querySelector('span').textContent = on ? 'Stop' : 'Record';
-  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => { const s = Math.round((Date.now() - recStart) / 1000); const st = $('#recStatus'); if (st.dataset.mode !== 'busy') setStatus(st, `● Recording ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')} — ${SpeechRec ? 'transcribing live' : 'audio will be transcribed by Gemini when you stop'}`, 'err'); }, 1000); }
+  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => { const s = Math.round((Date.now() - recStart) / 1000); const st = $('#recStatus'); if (st.dataset.mode !== 'busy') setStatus(st, `● Recording ${fmtDur(s)} — ${SpeechRec && !liveFailed ? 'transcribing live' : 'audio will be transcribed by Gemini when you stop'}`, 'err'); }, 1000); }
   else { clearInterval(recTimer); }
 }
 function appendTranscript(text) { const ta = $('#transcript'); const cur = ta.value.replace(/\s+$/, ''); ta.value = (cur ? cur + ' ' : '') + text.trim(); ta.scrollTop = ta.scrollHeight; updateAnalyzeBtn(); scheduleDraftSave(); }
@@ -630,9 +632,21 @@ async function startRecording() {
     try {
       recognizer = new SpeechRec(); recognizer.lang = $('#recLang').value; recognizer.continuous = true; recognizer.interimResults = true; recognizer.maxAlternatives = 1;
       let interim = '';
-      recognizer.onresult = e => { interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) appendTranscript(r[0].transcript); else interim += r[0].transcript; } if (interim) { st.dataset.mode = 'busy'; setStatus(st, '… ' + interim, ''); } else st.dataset.mode = ''; };
-      recognizer.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast('Microphone access denied — allow the microphone and try again', 'err'); stopRecording(); } else if (e.error === 'network') { toast('Speech service unavailable — check the connection (Chrome uses an online recognizer)', 'err'); } };
-      recognizer.onend = () => { if (recording) { try { recognizer.start(); } catch {} } }; // Chrome stops after silence: keep listening
+      liveFailed = false; liveGotText = false;
+      recognizer.onresult = e => { interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) { appendTranscript(r[0].transcript); liveGotText = true; } else interim += r[0].transcript; } if (interim) { st.dataset.mode = 'busy'; setStatus(st, '… ' + interim, ''); } else st.dataset.mode = ''; };
+      recognizer.onerror = e => {
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast('Microphone access denied — allow the microphone and try again', 'err'); stopRecording(); return; }
+        if (e.error === 'no-speech' || e.error === 'aborted') return; // harmless: restart is handled by onend
+        // 'network', 'audio-capture', 'language-not-supported' …: live recognition is not available here.
+        // Fail over silently: the evidence clip keeps recording and Gemini transcribes it when you stop.
+        if (!liveFailed) {
+          liveFailed = true; try { recognizer.onend = null; recognizer.stop(); } catch {} recognizer = null;
+          const why = e.error === 'network' ? 'the online speech service is not reachable' : `speech engine error: ${e.error}`;
+          st.dataset.mode = 'busy'; setStatus(st, `Live transcription unavailable (${why}) — recording continues; ${settings.geminiKey ? 'Gemini will transcribe the audio when you stop.' : 'add a Gemini API key in Settings to transcribe the audio.'}`, 'err');
+          if (!clipOk) { toast('Recording is not possible in this browser — type the transcript instead', 'err'); stopRecording(); }
+        }
+      };
+      recognizer.onend = () => { if (recording && recognizer) { try { recognizer.start(); } catch {} } }; // Chrome stops after silence: keep listening
       recognizer.start(); recording = true; setRecUI(true); return;
     } catch (e) { recognizer = null; }
   }
@@ -647,17 +661,19 @@ async function transcribeClip(clip) {
     const lang = $('#recLang').selectedOptions[0]?.textContent || '';
     const body = { contents: [{ role: 'user', parts: [{ text: `Transcribe this field-interview recording verbatim (language: ${lang}; keep numbers as digits; do not summarise). Return only the transcript text.` }, { inline_data: { mime_type: clip.mime, data: clip.dataUrl.split(',')[1] } }] }] };
     let d = await geminiCall(settings.model, body); if (d.error) d = await geminiCall(GEMINI_FALLBACK, body); if (d.error) throw new Error(d.error.message);
-    const text = d.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || ''; if (!text.trim()) throw new Error('empty transcript');
-    appendTranscript(text); setStatus(st, 'Transcript added — review it, then Analyze & fill', 'ok');
-  } catch (e) { setStatus(st, 'Transcription failed: ' + e.message, 'err'); }
+    const text = d.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || ''; if (!text.trim()) throw new Error('empty transcript (was anything said?)');
+    appendTranscript(text); setStatus(st, `Transcribed ${fmtDur(clip.duration)} of audio — review it, then Analyze & fill`, 'ok'); toast('Transcript ready', 'ok');
+  } catch (e) { setStatus(st, 'Transcription failed: ' + e.message, 'err'); toast('Transcription failed: ' + e.message, 'err'); }
 }
 async function stopRecording() {
   recording = false; setRecUI(false);
-  const hadRecognizer = !!recognizer;
   if (recognizer) { try { recognizer.onend = null; recognizer.stop(); } catch {} recognizer = null; }
   const clip = await finishClip();
-  if (hadRecognizer) setStatus($('#recStatus'), ($('#transcript').value.trim() ? `Transcript ready${clip ? ' · audio clip saved for reference' : ''} — edit if needed, then Analyze & fill` : 'Nothing was recognised — try again closer to the microphone'), 'ok');
-  else if (clip) await transcribeClip(clip);
+  const st = $('#recStatus'); st.dataset.mode = '';
+  if (liveGotText && !liveFailed) setStatus(st, `Transcript ready${clip ? ' · audio clip saved for reference' : ''} — edit if needed, then Analyze & fill`, 'ok');
+  else if (clip) { if (settings.geminiKey) await transcribeClip(clip); else setStatus(st, 'Audio clip saved. Add a Gemini API key in Settings and press “Transcribe” on the clip, or type the transcript.', 'err'); }
+  else setStatus(st, 'Nothing was recorded — check the microphone permission and try again', 'err');
+  liveFailed = false; liveGotText = false;
 }
 
 /* ------------------------------------------------------------------ */
