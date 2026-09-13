@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.10.3';
+const APP_VERSION = '1.10.4';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -227,7 +227,7 @@ const META_FIELDS = [
   { k: 'id', label: 'Record ID', type: 'text' }, { k: 'submitted_at', label: 'Submitted at', type: 'text' },
   { k: 'photo_count', label: 'Photo count', type: 'number' }, { k: 'photo_urls', label: 'Photo URLs', type: 'text' },
   { k: 'ai_engine', label: 'AI engine used', type: 'text' }, { k: 'app_version', label: 'App version', type: 'text' },
-  { k: 'interview_transcript', label: 'Interview transcript', type: 'text' },
+  { k: 'interview_transcript', label: 'Interview transcript', type: 'text' }, { k: 'interview_translation', label: 'Interview transcript (English)', type: 'text' },
   { k: 'audio_count', label: 'Audio clips', type: 'number' }, { k: 'audio_duration_s', label: 'Audio duration (s)', type: 'number' }, { k: 'audio_urls', label: 'Audio URLs', type: 'text' }, { k: 'transcript_url', label: 'Transcript URL', type: 'text' },
 ];
 
@@ -403,7 +403,7 @@ function clearForm() {
   photos = []; renderThumbs();
   if (recording) stopRecording();
   audioClips = []; renderClips();
-  if ($('#transcript')) { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; }
+  if ($('#transcript')) { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; $('#translation').textContent = ''; $('#translationWrap').hidden = true; }
   if ($('#aiContext')) $('#aiContext').value = '';
   setStatus($('#aiStatus'), ''); setStatus($('#locStatus'), '');
   $$('.sec-status').forEach(s => setStatus(s, ''));
@@ -420,8 +420,8 @@ function updateProgress() {
   SECTIONS.forEach(s => { $(`[data-count="${s.id}"]`).textContent = `${s.fields.filter(filled).length}/${s.fields.length}`; });
 }
 let draftTimer;
-function scheduleDraftSave() { clearTimeout(draftTimer); draftTimer = setTimeout(() => LS.set('gs_draft', { ...collect(), __transcript: $('#transcript')?.value || '' }), 400); }
-function restoreDraft() { const d = LS.get('gs_draft', null); if (!d) return; Object.entries(d).forEach(([k, v]) => { if (k === '__transcript') { if (v && $('#transcript')) { $('#transcript').value = v; $('#transcriptWrap').hidden = false; updateAnalyzeBtn(); } } else setValue(k, v); }); }
+function scheduleDraftSave() { clearTimeout(draftTimer); draftTimer = setTimeout(() => LS.set('gs_draft', { ...collect(), __transcript: $('#transcript')?.value || '', __translation: $('#translation')?.textContent || '' }), 400); }
+function restoreDraft() { const d = LS.get('gs_draft', null); if (!d) return; Object.entries(d).forEach(([k, v]) => { if (k === '__transcript') { if (v && $('#transcript')) { $('#transcript').value = v; $('#transcriptWrap').hidden = false; updateAnalyzeBtn(); } } else if (k === '__translation') { if (v && $('#translation')) { $('#translation').textContent = v; $('#translationWrap').hidden = false; } } else setValue(k, v); }); }
 
 /* ------------------------------------------------------------------ */
 /* Location: Geolocation API + OSM Nominatim reverse geocoding          */
@@ -627,8 +627,8 @@ async function stopRecording() {
   const clip = await finishClip();
   setStatus($('#recStatus'), clip ? `Clip ${audioClips.length} saved (${fmtDur(clip.duration)}). Press Analyze & fill — Gemini listens to the recording${photos.length ? ' and looks at the photos' : ''}, transcribes it and fills the form.` : 'Nothing was recorded — check the microphone permission and try again', clip ? 'ok' : 'err');
 }
-function langHint() { const l = settings.recLang || ''; return l ? `The interview is spoken in ${l} (it may mix in Hindi or English words); transcribe in ${l} using its native script` : 'Detect the language automatically (an Indian language, Hindi or English, possibly mixed); transcribe in the language and script actually spoken'; }
-const AUDIO_PROMPT = () => `Transcribe this field-interview recording verbatim. ${langHint()}; keep numbers as digits, do not summarise or translate. Return only the transcript text.`;
+function langHint() { const l = settings.recLang || ''; return (l ? `The interview is primarily in ${l} — treat ${l} as the default language, but auto-detect any switches to English, Hindi or other languages within the speech and transcribe each utterance in the language and script actually spoken` : 'Auto-detect the language of each utterance (an Indian language, Hindi or English, possibly mixed) and transcribe in the language and script actually spoken') + '; keep numbers as digits'; }
+const AUDIO_PROMPT = () => `Transcribe this field-interview recording verbatim. ${langHint()}; do not summarise or translate. Return only the transcript text.`;
 async function transcribeClip(clip) {
   const st = $('#recStatus');
   setStatus(st, `Transcribing ${fmtDur(clip.duration)} of audio with Gemini…`, '', true);
@@ -677,7 +677,8 @@ function updateEngineChip() {
 
 function promptFor(fields, ctx, sectionTitle, transcript = '', nAudio = 0) {
   const cat = fields.filter(f => f.options);
-  return `You are an assistant for a field enumerator conducting a household socio-economic survey. You will receive ${nAudio ? `${nAudio} audio recording(s) of the interview${transcript ? ', a transcript' : ''} and possibly ` : transcript ? 'an interview transcript and possibly ' : ''}one or more photos of the same household.${nAudio ? `\nAUDIO: listen to the recording(s) carefully. ${langHint()}. Extract every answer the respondent or enumerator states and map it to the closest allowed value; prefer spoken answers over photos when they conflict. Also return "interview_transcript": a verbatim transcript of the recording(s) in the language and script spoken (numbers as digits, no summary).` : ''} They may show: the outside or inside of a dwelling, household members, assets, livestock, farmland, water sources, toilets, kitchens, surroundings, a filled-in paper questionnaire, an ID/ration card, or other documents. Photos may carry a small semi-transparent stamp at the bottom-left with date, coordinates and address — you may use that address for location fields but otherwise ignore it.
+  return `You are an assistant for a field enumerator conducting a household socio-economic survey. You will receive ${nAudio ? `${nAudio} audio recording(s) of the interview${transcript ? ', a transcript' : ''} and possibly ` : transcript ? 'an interview transcript and possibly ' : ''}one or more photos of the same household.${nAudio ? `\nAUDIO: listen to the recording(s) carefully. ${langHint()}. Extract every answer the respondent or enumerator states and map it to the closest allowed value; prefer spoken answers over photos when they conflict. Also return "interview_transcript": a verbatim transcript of the recording(s) in the language and script spoken (no summary), and "interview_translation": a faithful English translation of that transcript.` : ''}
+OUTPUT LANGUAGE: every field value, observation and free-text answer you return MUST be in English only (Latin script). Translate answers given in any other language; write personal and place names in Latin transliteration (e.g. "Sita Mondal", "Bowbazar"). The only exception is "interview_transcript", which stays verbatim. They may show: the outside or inside of a dwelling, household members, assets, livestock, farmland, water sources, toilets, kitchens, surroundings, a filled-in paper questionnaire, an ID/ration card, or other documents. Photos may carry a small semi-transparent stamp at the bottom-left with date, coordinates and address — you may use that address for location fields but otherwise ignore it.
 ${sectionTitle ? `\nFOCUS: fill only the "${sectionTitle}" section fields listed below, based on what these photos show.` : ''}
 Rules:
 - Use ONLY the allowed values for categorical fields; leave a field null if it cannot be determined.
@@ -698,7 +699,7 @@ Respond with a single JSON object using these field keys only.`;
 }
 function geminiSchema(fields, withTranscript = false) {
   const props = {};
-  if (withTranscript) props.interview_transcript = { type: 'STRING', nullable: true };
+  if (withTranscript) { props.interview_transcript = { type: 'STRING', nullable: true }; props.interview_translation = { type: 'STRING', nullable: true }; }
   fields.forEach(f => {
     if (f.type === 'select') props[f.k] = { type: 'STRING', enum: f.options, nullable: true };
     else if (f.type === 'multi') props[f.k] = { type: 'ARRAY', items: { type: 'STRING', enum: f.options }, nullable: true };
@@ -824,6 +825,7 @@ async function analyzePhotos(section = '', list = null) {
     const out = await fn(fields, list, prompt, onStatus, audio);
     let n = 0;
     if (out && out.interview_transcript && String(out.interview_transcript).trim()) { const ta = $('#transcript'); if (!ta.value.trim() || ta.dataset.auto === '1') { ta.value = String(out.interview_transcript).trim(); ta.dataset.auto = '1'; $('#transcriptWrap').hidden = false; } }
+    if (out && out.interview_translation && String(out.interview_translation).trim()) { const tr = $('#translation'); tr.textContent = String(out.interview_translation).trim(); tr.parentElement.hidden = false; scheduleDraftSave(); }
     const allowed = new Set(fields.map(f => f.k));
     Object.entries(out || {}).forEach(([k, v]) => {
       if (!allowed.has(k) || v == null || v === '' || (Array.isArray(v) && !v.length)) return;
@@ -867,7 +869,7 @@ async function submitForm() {
   const btn = $('#submitBtn'); btn.disabled = true;
   try {
     const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2);
-    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', ai_engine: lastEngine, app_version: APP_VERSION, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
+    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', ai_engine: lastEngine, app_version: APP_VERSION, interview_transcript: ($('#transcript')?.value || '').trim(), interview_translation: ($('#translation')?.textContent || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
     if (photos.length || audioClips.length) {
       if (photos.length) { try { rec.photo_thumb = await makeThumb(photos[0].dataUrl); } catch {} }
       await PhotoDB.put(id, photos.map(p => ({ name: p.name, section: p.section, dataUrl: p.dataUrl, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc })), audioClips.map((c, i) => ({ name: `audio_${i + 1}.${c.mime.includes('mp4') ? 'm4a' : c.mime.includes('ogg') ? 'ogg' : 'webm'}`, ...c })));
@@ -923,7 +925,7 @@ function renderLocalTable() {
   $$('#localTable [data-audio]').forEach(b => b.onclick = async () => {
     const clips = await PhotoDB.getAudio(b.dataset.audio); const rec = getRecords().find(x => x.id === b.dataset.audio);
     $('#photoDlgTitle').textContent = 'Interview recording & transcript';
-    $('#photoDlgGallery').innerHTML = (clips.map((c, i) => `<figure class="audio-fig"><audio controls src="${c.dataUrl}"></audio><figcaption>Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtDate(c.taken_at)}${c.lat != null ? ` · ${(+c.lat).toFixed(5)}, ${(+c.lon).toFixed(5)}` : ''}</figcaption></figure>`).join('') + (rec?.interview_transcript ? `<div class="transcript-view"><div class="dim">Transcript (verbatim, as recorded)</div><p>${esc(rec.interview_transcript)}</p></div>` : '')) || '<p class="dim">No recording or transcript stored.</p>';
+    $('#photoDlgGallery').innerHTML = (clips.map((c, i) => `<figure class="audio-fig"><audio controls src="${c.dataUrl}"></audio><figcaption>Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtDate(c.taken_at)}${c.lat != null ? ` · ${(+c.lat).toFixed(5)}, ${(+c.lon).toFixed(5)}` : ''}</figcaption></figure>`).join('') + (rec?.interview_transcript ? `<div class="transcript-view"><div class="dim">Transcript (verbatim, as recorded)</div><p>${esc(rec.interview_transcript)}</p>${rec.interview_translation ? `<div class="dim" style="margin-top:10px">English translation</div><p>${esc(rec.interview_translation)}</p>` : ''}</div>` : '')) || '<p class="dim">No recording or transcript stored.</p>';
     $('#photoDlg').showModal();
   });
   $$('#localTable [data-dl]').forEach(b => b.onclick = async () => {
