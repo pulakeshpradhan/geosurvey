@@ -4,6 +4,8 @@ A free survey app for household / socio-economic field work. It runs in the phon
 
 **Open the app:** https://pulakeshpradhan.github.io/geosurvey/
 
+**Step-by-step setup slides (with pictures):** https://pulakeshpradhan.github.io/geosurvey/guide/ — the same steps as below, one screen per click; use *Print all slides* for a handout.
+
 Nothing to install. On a phone, open the link in Chrome (Android) or Safari (iPhone) and choose *Add to Home Screen* to use it like an app. It works offline and syncs when internet is back.
 
 ---
