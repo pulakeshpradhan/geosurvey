@@ -9,10 +9,11 @@
  *  1. Create a new Google Sheet (sheets.new).
  *  2. Extensions → Apps Script. Delete the default code, paste this file.
  *  3. Set ADMIN_TOKEN below to a long secret of your choice. Save.
- *  4. Deploy → New deployment → Type: "Web app"
+ *  4. Run the function "authorizeDrive" once (▶ Run) and allow Sheets + Drive access.
+ *  5. Deploy → New deployment → Type: "Web app"
  *       Execute as: Me            Who has access: Anyone
- *     → Deploy → Authorize (Sheets + Drive) → copy the Web app URL (ends with /exec).
- *  5. Paste that URL into GeoSurvey → Settings → "Database endpoint".
+ *     → Deploy → copy the Web app URL (ends with /exec).
+ *  6. Paste that URL into GeoSurvey → Settings → "Database endpoint" and press "Test database".
  *     Use ADMIN_TOKEN in the app's Admin tab to view / delete / export all data.
  *
  * Each submission = one row in "Responses" (new fields become new columns automatically).
@@ -21,7 +22,19 @@
  * (Deploy → Manage deployments → Edit → Version: New).
  */
 
-var BACKEND_VERSION = '1.14';                      // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.14.1';                    // reported to the app (Settings → Test database)
+
+/**
+ * ONE-TIME DRIVE AUTHORISATION (needed once per script):
+ *   In the Apps Script editor choose the function "authorizeDrive" in the toolbar dropdown and click ▶ Run.
+ *   Google shows a consent screen → Review permissions → choose your account → Advanced → "Go to … (unsafe)" → Allow.
+ *   Then Deploy → Manage deployments → Edit → New version → Deploy. The app's Settings → "Test database" will confirm.
+ */
+function authorizeDrive() {
+  var f = folder_();                       // creates "GeoSurvey Photos" in My Drive if missing
+  var ss = ss_(); getSheet_(); configSheet_();
+  Logger.log('Drive authorised. Folder: ' + f.getUrl() + ' | Sheet: ' + ss.getUrl());
+}
 var ADMIN_TOKEN = 'change-me-to-a-long-secret';   // <-- REQUIRED for the Admin tab
 var SHEET_NAME = 'Responses';
 var PHOTO_FOLDER = 'GeoSurvey Photos';
@@ -136,7 +149,7 @@ function doGet(e) {
     var p = (e && e.parameter) || {};
     if (p.action === 'schema') { var js = getConfig_('schema'); return json_({ ok: true, schema: js ? JSON.parse(js) : null }); }
     if (p.action === 'ping') { // health check: version, sheet, Drive folder (created if missing)
-      var fu = '', ferr = ''; try { fu = folder_().getUrl(); } catch (e0) { ferr = String(e0); }
+      var fu = '', ferr = ''; try { fu = folder_().getUrl(); } catch (e0) { ferr = /permission/i.test(String(e0)) ? 'DRIVE_NOT_AUTHORIZED' : String(e0); }
       return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: Math.max(0, getSheet_().getLastRow() - 1) });
     }
     var sh = getSheet_();

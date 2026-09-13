@@ -28,9 +28,10 @@ A free, browser-based household survey platform (in the spirit of Google Forms /
 ## Database (Google Sheets + Drive) — 2 minutes
 
 1. New Google Sheet → **Extensions → Apps Script** → replace the code with [`backend/Code.gs`](backend/Code.gs).
-2. Set `ADMIN_TOKEN` to a long secret (this unlocks the Admin tab). Save.
-3. **Deploy → New deployment → Web app**, *Execute as: Me*, *Who has access: Anyone* → Deploy → authorize (Sheets + Drive) → copy the `/exec` URL.
-4. Paste it in GeoSurvey → ⚙️ Settings → *Database endpoint*.
+2. Set `ADMIN_TOKEN` to a long secret (this unlocks the Collected-data panel). Save.
+3. **Authorise Drive once:** in the toolbar pick the function `authorizeDrive` → ▶ Run → Review permissions → Advanced → Go to project → Allow. (Optional: View → Show manifest and paste [`backend/appsscript.json`](backend/appsscript.json) so the scopes are explicit.)
+4. **Deploy → New deployment → Web app**, *Execute as: Me*, *Who has access: Anyone* → Deploy → copy the `/exec` URL.
+5. Paste it in GeoSurvey → ⚙️ Settings → *Database endpoint* → **Test database** (must report the backend version and the Drive folder).
 
 Each submission becomes one row (new fields become new columns automatically); photos, interview recordings and transcripts are saved to a Drive folder **GeoSurvey Photos** (in *My Drive* of the account that deployed the script) and linked in `photo_urls`, `audio_urls`, `transcript_url`. Without a token the endpoint only reveals the row count.
 

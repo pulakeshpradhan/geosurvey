@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.14.1';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -952,6 +952,8 @@ async function submitForm() {
   await syncPending();
 }
 const REQUIRED_BACKEND = 1.14;
+const DRIVE_HELP = 'Drive is not authorised for the backend. In the Apps Script editor pick the function "authorizeDrive", click Run and allow access, then Deploy > Manage deployments > Edit > New version. Then retry.';
+const friendlyErr = m => /permission to call DriveApp|DRIVE_NOT_AUTHORIZED|drive\.readonly/i.test(String(m)) ? DRIVE_HELP : String(m);
 function noteBackend(j) { if (j && j.folderUrl) { settings.folderUrl = j.folderUrl; LS.set('gs_settings', settings); } if (j && j.version) settings.backendVersion = j.version; }
 /** Verify the database endpoint: backend version, sheet and Drive folder. */
 async function testDatabase() {
@@ -961,7 +963,7 @@ async function testDatabase() {
   if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
   if (!j.version) throw new Error('Connected, but the backend is an OLD Code.gs without Drive upload — paste the latest backend/Code.gs and deploy a NEW VERSION');
   noteBackend(j);
-  if (j.driveError) throw new Error(`Backend v${j.version} reached, but Drive access failed: ${j.driveError}. Re-deploy and authorise Drive when prompted.`);
+  if (j.driveError) throw new Error(`Backend v${j.version} reached, but Drive access failed. ${friendlyErr(j.driveError)}`);
   if (parseFloat(j.version) < REQUIRED_BACKEND) return `Backend v${j.version} (older than ${REQUIRED_BACKEND} — please deploy the latest Code.gs as a new version) · ${j.rows} rows · Drive folder "${j.folderName}" ready`;
   return `Backend v${j.version} OK · ${j.rows} rows in the sheet · Drive folder "${j.folderName}" ready`;
 }
@@ -975,7 +977,8 @@ async function sendRecord(rec) {
   if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
   noteBackend(j);
   if (!j.version && ((payload.photos || []).length || (payload.audio || []).length)) rec.files_error = 'Backend is an old Code.gs — files were NOT stored. Deploy the latest Code.gs as a new version, then tap "Upload files".';
-  else if ((payload.photos || []).length && !j.photo_urls) rec.files_error = 'Backend did not return file links — check Drive authorisation.';
+  else if ((payload.photos || []).length && !j.photo_urls) rec.files_error = 'Backend did not return file links. ' + DRIVE_HELP;
+  else if (/ERROR/.test(j.photo_urls || '') || /ERROR/.test(j.audio_urls || '') || /ERROR/.test(j.transcript_url || '')) rec.files_error = friendlyErr([j.photo_urls, j.audio_urls, j.transcript_url].join(' '));
   else delete rec.files_error;
   return j;
 }
@@ -985,8 +988,10 @@ async function attachFiles(rec) {
   if (!body.photos.length && !body.audio.length && !body.interview_transcript) throw new Error('No files kept on this device for that record');
   const r = await fetch(settings.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
-  if (!j.ok) throw new Error(j.error || (j.version ? 'Upload failed' : 'Backend is an old Code.gs — deploy the latest version first'));
+  if (!j.ok) throw new Error(friendlyErr(j.error) || (j.version ? 'Upload failed' : 'Backend is an old Code.gs — deploy the latest version first'));
   noteBackend(j);
+  const bad = [j.photo_urls, j.audio_urls, j.transcript_url].filter(u => /ERROR/.test(u || '')).join(' ');
+  if (bad) throw new Error(friendlyErr(bad));
   if (j.photo_urls) rec.photo_urls = j.photo_urls; if (j.audio_urls) rec.audio_urls = j.audio_urls; if (j.transcript_url) rec.transcript_url = j.transcript_url;
   delete rec.files_error; return j;
 }
@@ -995,9 +1000,10 @@ async function uploadMissingFiles() {
   const records = getRecords(); const todo = records.filter(r => r.status === 'synced' && filesMissing(r));
   if (!todo.length) return toast('All files of synced records are already in Drive', 'ok');
   let ok = 0, fail = 0;
-  for (const rec of todo) { try { await attachFiles(rec); ok++; } catch (e) { rec.files_error = e.message; fail++; } saveRecords(records); }
+  let lastErr = '';
+  for (const rec of todo) { try { await attachFiles(rec); ok++; } catch (e) { rec.files_error = e.message; lastErr = e.message; fail++; saveRecords(records); if (e.message === DRIVE_HELP) break; } saveRecords(records); }
   renderLocalTable();
-  if (ok) toast(`${ok} record(s): files uploaded to Drive`, 'ok'); if (fail) toast(`${fail} record(s) failed — see the Records table`, 'err');
+  if (ok) toast(`${ok} record(s): files uploaded to Drive`, 'ok'); if (fail) toast(lastErr === DRIVE_HELP ? DRIVE_HELP : `${fail} record(s) failed — see the Records table`, 'err');
 }
 const filesMissing = r => ((r.photo_count > 0 && !(r.photo_urls || '').includes('drive.google.com')) || (r.audio_count > 0 && !(r.audio_urls || '').includes('drive.google.com')) || (r.interview_transcript && !(r.transcript_url || '').includes('drive.google.com')));
 let syncing = false;
@@ -1029,7 +1035,7 @@ function renderLocalTable() {
   const filesCell = r => {
     if (!(r.photo_count || r.audio_count || r.interview_transcript)) return '<span class="dim">—</span>';
     if (r.status !== 'synced') return '<span class="pill pending">on device</span>';
-    if (filesMissing(r)) return `<span class="pill failed" title="${esc(r.files_error || 'Files were not stored in Drive')}">not in Drive</span> <button class="link-btn" data-attach="${r.id}">Upload files</button>`;
+    if (filesMissing(r)) return `<span class="pill failed" title="${esc(r.files_error || 'Files were not stored in Drive')}">not in Drive</span> <button class="link-btn" data-attach="${r.id}">Upload files</button>${r.files_error === DRIVE_HELP ? '<div class="dim" style="white-space:normal;max-width:320px;font-size:11.5px">Drive not authorised: run <code>authorizeDrive</code> in Apps Script, deploy a new version, then Upload files.</div>' : ''}`;
     return `<span class="pill synced">in Drive</span> ${String(r.photo_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Photo ${i + 1}">📷</a>`).join('')}${String(r.audio_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Audio ${i + 1}">🎙</a>`).join('')}${(r.transcript_url || '').includes('drive') ? `<a href="${esc(r.transcript_url)}" target="_blank" rel="noopener" title="Transcript">📝</a>` : ''}`;
   };
   $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th><th>Files in Drive</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>` +
