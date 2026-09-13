@@ -2,9 +2,22 @@
 
 A free survey app for household / socio-economic field work. It runs in the phone's browser, fills the form for you from **photos and voice recordings** (AI), records the **exact location automatically**, saves everything to **your own Google Sheet and Google Drive**, and gives you **statistics and reports** on the collected data.
 
-**Open the app:** https://pulakeshpradhan.github.io/geosurvey/
+| | |
+|---|---|
+| 📱 **Open the app** | https://pulakeshpradhan.github.io/geosurvey/ |
+| 🖼️ **Setup slides (click by click)** | https://pulakeshpradhan.github.io/geosurvey/guide/ |
+| 📄 **Written guide** | this page (below) |
+| 🔑 **Free AI key** | https://aistudio.google.com/app/apikey |
+| 📊 **Backend code to paste into Google Sheets** | [backend/Code.gs](backend/Code.gs) |
+| 🐞 **Report a problem / ask for a feature** | https://github.com/pulakeshpradhan/geosurvey/issues |
 
-**Step-by-step setup slides (with pictures):** https://pulakeshpradhan.github.io/geosurvey/guide/ — the same steps as below, one screen per click; use *Print all slides* for a handout.
+**What it does**
+
+- **Fills the form for you** – take photos (house, kitchen, water source, ID card, filled paper form) or record the interview in any Indian language; the AI writes the transcript and fills the answers in English for you to check.
+- **Knows where you are** – precise GPS location and address are captured automatically; every photo is stamped with time and place.
+- **Your data, your Google account** – one row per household in a Google Sheet, photos and recordings in a Drive folder, offline-safe on the phone until synced.
+- **Your questionnaire** – use the sample, design your own like Google Forms, or upload the paper questionnaire and let the AI convert it; publish it to every phone.
+- **Results built in** – statistics with charts and a plain-language report (reliability, factor analysis, SEM, mediation/moderation); downloads as CSV, SPSS, KMZ and A4 PDF.
 
 Nothing to install. On a phone, open the link in Chrome (Android) or Safari (iPhone) and choose *Add to Home Screen* to use it like an app. It works offline and syncs when internet is back.
 
