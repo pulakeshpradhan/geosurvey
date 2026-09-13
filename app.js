@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '1.10.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -577,28 +577,35 @@ function openGallery(title, list) {
 /* Voice: record the interview → live speech-to-text (Web Speech API, free, on-device/browser) →       */
 /* transcript feeds Analyze & fill. Fallback: MediaRecorder audio → Gemini transcription.                */
 /* ------------------------------------------------------------------ */
-let recording = false, recognizer = null, mediaRec = null, mediaChunks = [], recStart = 0, recTimer = null;
-let audioClips = []; // [{ dataUrl, mime, bytes, duration, taken_at, lat, lon }] — kept as evidence like the photos
-let liveFailed = false, liveGotText = false; // Web Speech availability during the current recording
+let recording = false, mediaRec = null, mediaChunks = [], recStart = 0, recTimer = null;
+let audioClips = []; // [{ dataUrl, mime, bytes, duration, taken_at, lat, lon }] — evidence, and input for Analyze & fill
 function fmtDur(s) { s = Math.round(s || 0); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
+function updateAnalyzeBtn() { const t = ($('#transcript')?.value || '').trim(); $('#analyzeBtn').disabled = photos.length === 0 && !t && audioClips.length === 0; }
 function renderClips() {
   const host = $('#audioClips'); if (!host) return;
-  host.innerHTML = audioClips.map((c, i) => `<div class="clip"><span class="clip-ic">🎙</span><span class="clip-meta">Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtBytes(c.bytes)}${c.lat != null ? ' · GPS' : ''}</span><audio controls preload="none" src="${c.dataUrl}"></audio><button type="button" class="link-btn" data-tx="${i}" title="Transcribe this clip with Gemini">Transcribe</button><button type="button" class="icon-btn" data-clip="${i}" title="Delete clip">✕</button></div>`).join('');
-  $$('#audioClips [data-clip]').forEach(b => b.onclick = () => { if (confirm('Delete this recording?')) { audioClips.splice(+b.dataset.clip, 1); renderClips(); } });
+  host.innerHTML = audioClips.map((c, i) => `<div class="clip"><span class="clip-ic">🎙</span><span class="clip-meta">Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtBytes(c.bytes)}${c.lat != null ? ' · GPS' : ''}</span><audio controls preload="none" src="${c.dataUrl}"></audio><button type="button" class="link-btn" data-tx="${i}" title="Transcribe this clip only (Analyze & fill also transcribes)">Transcribe</button><button type="button" class="icon-btn" data-clip="${i}" title="Delete clip">✕</button></div>`).join('');
+  $$('#audioClips [data-clip]').forEach(b => b.onclick = () => { if (confirm('Delete this recording?')) { audioClips.splice(+b.dataset.clip, 1); renderClips(); updateAnalyzeBtn(); } });
   $$('#audioClips [data-tx]').forEach(b => b.onclick = async () => { if (!settings.geminiKey) { openSettings(); return toast('Add a Gemini API key to transcribe audio', 'err'); } b.disabled = true; try { await transcribeClip(audioClips[+b.dataset.tx]); } finally { b.disabled = false; } });
   host.hidden = !audioClips.length; if (audioClips.length) $('#transcriptWrap').hidden = false;
+  updateAnalyzeBtn();
 }
-/** Start a low-bitrate MediaRecorder for the evidence clip (runs alongside live recognition when available). */
-async function startClip() {
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return false;
+function setRecUI(on) {
+  const b = $('#recBtn'); b.classList.toggle('recording', on); b.querySelector('span').textContent = on ? 'Stop' : 'Record';
+  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => setStatus($('#recStatus'), `● Recording ${fmtDur((Date.now() - recStart) / 1000)} — speak in any language; press Stop when done`, 'err'), 1000); }
+  else clearInterval(recTimer);
+}
+function appendTranscript(text) { const ta = $('#transcript'); const cur = ta.value.replace(/\s+$/, ''); ta.value = (cur ? cur + '\n' : '') + text.trim(); ta.scrollTop = ta.scrollHeight; $('#transcriptWrap').hidden = false; updateAnalyzeBtn(); scheduleDraftSave(); }
+async function toggleRecording() { if (recording) await stopRecording(); else await startRecording(); }
+async function startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return toast('This browser cannot record audio — type the transcript instead', 'err');
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find(m => MediaRecorder.isTypeSupported(m)) || '';
     mediaChunks = []; mediaRec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 });
     mediaRec.ondataavailable = e => { if (e.data.size) mediaChunks.push(e.data); };
     mediaRec._stream = stream; mediaRec._start = Date.now(); mediaRec._fix = lastFix;
-    mediaRec.start(1000); return true;
-  } catch (e) { toast('Microphone unavailable for the audio clip: ' + e.message, 'err'); return false; }
+    mediaRec.start(1000); recording = true; setRecUI(true);
+  } catch (e) { toast(e.name === 'NotAllowedError' ? 'Microphone access denied — allow the microphone and try again' : 'Microphone error: ' + e.message, 'err'); }
 }
 function finishClip() {
   return new Promise(res => {
@@ -615,65 +622,21 @@ function finishClip() {
     rec.stop();
   });
 }
-const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-function updateAnalyzeBtn() { const t = ($('#transcript')?.value || '').trim(); $('#analyzeBtn').disabled = photos.length === 0 && !t; }
-function setRecUI(on) {
-  const b = $('#recBtn'); b.classList.toggle('recording', on); b.querySelector('span').textContent = on ? 'Stop' : 'Record';
-  if (on) { $('#transcriptWrap').hidden = false; recStart = Date.now(); recTimer = setInterval(() => { const s = Math.round((Date.now() - recStart) / 1000); const st = $('#recStatus'); if (st.dataset.mode !== 'busy') setStatus(st, `● Recording ${fmtDur(s)} — ${SpeechRec && !liveFailed ? 'transcribing live' : 'audio will be transcribed by Gemini when you stop'}`, 'err'); }, 1000); }
-  else { clearInterval(recTimer); }
+async function stopRecording() {
+  recording = false; setRecUI(false);
+  const clip = await finishClip();
+  setStatus($('#recStatus'), clip ? `Clip ${audioClips.length} saved (${fmtDur(clip.duration)}). Press Analyze & fill — Gemini listens to the recording${photos.length ? ' and looks at the photos' : ''}, transcribes it and fills the form.` : 'Nothing was recorded — check the microphone permission and try again', clip ? 'ok' : 'err');
 }
-function appendTranscript(text) { const ta = $('#transcript'); const cur = ta.value.replace(/\s+$/, ''); ta.value = (cur ? cur + ' ' : '') + text.trim(); ta.scrollTop = ta.scrollHeight; updateAnalyzeBtn(); scheduleDraftSave(); }
-async function toggleRecording() { if (recording) stopRecording(); else await startRecording(); }
-async function startRecording() {
-  const st = $('#recStatus'); st.dataset.mode = '';
-  if (!SpeechRec && !settings.geminiKey) { openSettings(); return toast('This browser has no built-in speech recognition; add a Gemini API key so the recording can be transcribed', 'err'); }
-  const clipOk = await startClip(); // evidence recording (always attempted)
-  if (SpeechRec) {
-    try {
-      recognizer = new SpeechRec(); recognizer.lang = $('#recLang').value; recognizer.continuous = true; recognizer.interimResults = true; recognizer.maxAlternatives = 1;
-      let interim = '';
-      liveFailed = false; liveGotText = false;
-      recognizer.onresult = e => { interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) { appendTranscript(r[0].transcript); liveGotText = true; } else interim += r[0].transcript; } if (interim) { st.dataset.mode = 'busy'; setStatus(st, '… ' + interim, ''); } else st.dataset.mode = ''; };
-      recognizer.onerror = e => {
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast('Microphone access denied — allow the microphone and try again', 'err'); stopRecording(); return; }
-        if (e.error === 'no-speech' || e.error === 'aborted') return; // harmless: restart is handled by onend
-        // 'network', 'audio-capture', 'language-not-supported' …: live recognition is not available here.
-        // Fail over silently: the evidence clip keeps recording and Gemini transcribes it when you stop.
-        if (!liveFailed) {
-          liveFailed = true; try { recognizer.onend = null; recognizer.stop(); } catch {} recognizer = null;
-          const why = e.error === 'network' ? 'the online speech service is not reachable' : `speech engine error: ${e.error}`;
-          st.dataset.mode = 'busy'; setStatus(st, `Live transcription unavailable (${why}) — recording continues; ${settings.geminiKey ? 'Gemini will transcribe the audio when you stop.' : 'add a Gemini API key in Settings to transcribe the audio.'}`, 'err');
-          if (!clipOk) { toast('Recording is not possible in this browser — type the transcript instead', 'err'); stopRecording(); }
-        }
-      };
-      recognizer.onend = () => { if (recording && recognizer) { try { recognizer.start(); } catch {} } }; // Chrome stops after silence: keep listening
-      recognizer.start(); recording = true; setRecUI(true); return;
-    } catch (e) { recognizer = null; }
-  }
-  // No browser speech engine: the clip is transcribed by Gemini when you stop
-  if (!clipOk) return toast('This browser has no speech recognition or audio recording — type the transcript instead', 'err');
-  recording = true; setRecUI(true);
-}
+const AUDIO_PROMPT = 'Transcribe this field-interview recording verbatim. Detect the language automatically (it may be Bengali, Hindi, English or another language, possibly mixed); write the transcript in the language and script actually spoken, keep numbers as digits, do not summarise or translate. Return only the transcript text.';
 async function transcribeClip(clip) {
   const st = $('#recStatus');
   setStatus(st, `Transcribing ${fmtDur(clip.duration)} of audio with Gemini…`, '', true);
   try {
-    const lang = $('#recLang').selectedOptions[0]?.textContent || '';
-    const body = { contents: [{ role: 'user', parts: [{ text: `Transcribe this field-interview recording verbatim (language: ${lang}; keep numbers as digits; do not summarise). Return only the transcript text.` }, { inline_data: { mime_type: clip.mime, data: clip.dataUrl.split(',')[1] } }] }] };
+    const body = { contents: [{ role: 'user', parts: [{ text: AUDIO_PROMPT }, { inline_data: { mime_type: clip.mime, data: clip.dataUrl.split(',')[1] } }] }] };
     let d = await geminiCall(settings.model, body); if (d.error) d = await geminiCall(GEMINI_FALLBACK, body); if (d.error) throw new Error(d.error.message);
     const text = d.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || ''; if (!text.trim()) throw new Error('empty transcript (was anything said?)');
     appendTranscript(text); setStatus(st, `Transcribed ${fmtDur(clip.duration)} of audio — review it, then Analyze & fill`, 'ok'); toast('Transcript ready', 'ok');
   } catch (e) { setStatus(st, 'Transcription failed: ' + e.message, 'err'); toast('Transcription failed: ' + e.message, 'err'); }
-}
-async function stopRecording() {
-  recording = false; setRecUI(false);
-  if (recognizer) { try { recognizer.onend = null; recognizer.stop(); } catch {} recognizer = null; }
-  const clip = await finishClip();
-  const st = $('#recStatus'); st.dataset.mode = '';
-  if (liveGotText && !liveFailed) setStatus(st, `Transcript ready${clip ? ' · audio clip saved for reference' : ''} — edit if needed, then Analyze & fill`, 'ok');
-  else if (clip) { if (settings.geminiKey) await transcribeClip(clip); else setStatus(st, 'Audio clip saved. Add a Gemini API key in Settings and press “Transcribe” on the clip, or type the transcript.', 'err'); }
-  else setStatus(st, 'Nothing was recorded — check the microphone permission and try again', 'err');
-  liveFailed = false; liveGotText = false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -711,9 +674,9 @@ function updateEngineChip() {
   if (opt) opt.textContent = 'Chrome built-in AI (Gemini Nano, no key)' + (chromeAI ? (chromeAI === 'available' ? ' — ready' : ' — needs one-time download') : ' — not available in this browser');
 }
 
-function promptFor(fields, ctx, sectionTitle, transcript = '') {
+function promptFor(fields, ctx, sectionTitle, transcript = '', nAudio = 0) {
   const cat = fields.filter(f => f.options);
-  return `You are an assistant for a field enumerator conducting a household socio-economic survey. You will receive ${transcript ? 'an interview transcript and possibly ' : ''}one or more photos of the same household. They may show: the outside or inside of a dwelling, household members, assets, livestock, farmland, water sources, toilets, kitchens, surroundings, a filled-in paper questionnaire, an ID/ration card, or other documents. Photos may carry a small semi-transparent stamp at the bottom-left with date, coordinates and address — you may use that address for location fields but otherwise ignore it.
+  return `You are an assistant for a field enumerator conducting a household socio-economic survey. You will receive ${nAudio ? `${nAudio} audio recording(s) of the interview${transcript ? ', a transcript' : ''} and possibly ` : transcript ? 'an interview transcript and possibly ' : ''}one or more photos of the same household.${nAudio ? `\nAUDIO: listen to the recording(s) carefully; detect the language automatically (Bengali, Hindi, English or others, possibly mixed). Extract every answer the respondent or enumerator states and map it to the closest allowed value; prefer spoken answers over photos when they conflict. Also return "interview_transcript": a verbatim transcript of the recording(s) in the language and script spoken (numbers as digits, no summary).` : ''} They may show: the outside or inside of a dwelling, household members, assets, livestock, farmland, water sources, toilets, kitchens, surroundings, a filled-in paper questionnaire, an ID/ration card, or other documents. Photos may carry a small semi-transparent stamp at the bottom-left with date, coordinates and address — you may use that address for location fields but otherwise ignore it.
 ${sectionTitle ? `\nFOCUS: fill only the "${sectionTitle}" section fields listed below, based on what these photos show.` : ''}
 Rules:
 - Use ONLY the allowed values for categorical fields; leave a field null if it cannot be determined.
@@ -732,8 +695,9 @@ ${cat.map(f => `- ${f.k}${f.type === 'multi' ? ' (multi-select)' : ''}: ${f.opti
 ${fields.filter(f => !f.options).map(f => `- ${f.k}: ${f.type === 'number' ? 'integer' : 'text'}`).join('\n')}
 Respond with a single JSON object using these field keys only.`;
 }
-function geminiSchema(fields) {
+function geminiSchema(fields, withTranscript = false) {
   const props = {};
+  if (withTranscript) props.interview_transcript = { type: 'STRING', nullable: true };
   fields.forEach(f => {
     if (f.type === 'select') props[f.k] = { type: 'STRING', enum: f.options, nullable: true };
     else if (f.type === 'multi') props[f.k] = { type: 'ARRAY', items: { type: 'STRING', enum: f.options }, nullable: true };
@@ -775,11 +739,11 @@ async function testConnection() {
   if (e === 'openrouter') { const r = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.orKey}` }, body: JSON.stringify({ model: settings.orModel, messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 5 }) }); const d = await r.json(); if (d.error) throw new Error(d.error.message); return `OpenRouter ${settings.orModel}: ${d.choices?.[0]?.message?.content?.trim() || 'reply received'}`; }
   if (!chromeAI) throw new Error('Chrome built-in AI not available'); return 'Chrome built-in AI available';
 }
-async function analyzeGemini(fields, list, prompt, onStatus) {
+async function analyzeGemini(fields, list, prompt, onStatus, audio = []) {
   if (!settings.geminiKey) throw new Error('No Gemini API key set (Settings)');
-  onStatus(`Analyzing ${list.length} photo(s) with ${settings.model}…`);
-  const parts = [{ text: prompt }, ...list.map(p => ({ inline_data: { mime_type: 'image/jpeg', data: p.dataUrl.split(',')[1] } }))];
-  const body = { contents: [{ role: 'user', parts }], generationConfig: { responseMimeType: 'application/json', responseSchema: geminiSchema(fields), temperature: 0.1 } };
+  onStatus(`Analyzing ${list.length ? `${list.length} photo(s)` : ''}${list.length && audio.length ? ' + ' : ''}${audio.length ? `${audio.length} recording(s)` : ''}${!list.length && !audio.length ? 'the transcript' : ''} with ${settings.model}…`);
+  const parts = [{ text: prompt }, ...list.map(p => ({ inline_data: { mime_type: 'image/jpeg', data: p.dataUrl.split(',')[1] } })), ...audio.map(c => ({ inline_data: { mime_type: c.mime, data: c.dataUrl.split(',')[1] } }))];
+  const body = { contents: [{ role: 'user', parts }], generationConfig: { responseMimeType: 'application/json', responseSchema: geminiSchema(fields, audio.length > 0), temperature: 0.1 } };
   // Minimise reasoning latency: Gemini 3.x takes thinkingLevel, 2.5 takes thinkingBudget
   body.generationConfig.thinkingConfig = /^gemini-3/.test(settings.model) ? { thinkingLevel: 'low' } : { thinkingBudget: 0 };
   // Self-healing attempt chain: as configured → no thinking config → no strict schema → fallback model
@@ -787,7 +751,7 @@ async function analyzeGemini(fields, list, prompt, onStatus) {
     { model: settings.model, body },
     { model: settings.model, body: { ...body, generationConfig: { ...body.generationConfig, thinkingConfig: undefined } } },
     { model: settings.model, body: { ...body, generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } } },
-    { model: GEMINI_FALLBACK, body: { ...body, generationConfig: { responseMimeType: 'application/json', responseSchema: geminiSchema(fields), temperature: 0.1 } } },
+    { model: GEMINI_FALLBACK, body: { ...body, generationConfig: { responseMimeType: 'application/json', responseSchema: geminiSchema(fields, audio.length > 0), temperature: 0.1 } } },
   ];
   let lastErr = 'Gemini error';
   for (const a of attempts) {
@@ -841,20 +805,24 @@ let lastEngine = '';
 async function analyzePhotos(section = '', list = null) {
   list = list || (section ? photos.filter(p => p.section === section) : photos);
   const transcript = ($('#transcript')?.value || '').trim();
-  if (!list.length && !transcript) return toast(section ? 'Capture a photo for this section first (the box next to the AI icon)' : 'Capture a photo or record the interview first');
+  let audio = audioClips.slice();
+  if (!list.length && !transcript && !audio.length) return toast(section ? 'Capture a photo for this section first (the box next to the AI icon)' : 'Capture a photo or record the interview first');
   const st = section ? $(`[data-status="${section}"]`) : $('#aiStatus');
   const btn = $('#analyzeBtn');
   const engine = activeEngine();
   if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
+  if (audio.length && engine !== 'gemini') { toast('Audio analysis needs Gemini — using the typed transcript only'); audio = []; }
+  const budget = 18e6 - list.reduce((s, p) => s + p.bytes, 0); let acc = 0; audio = audio.filter(c => (acc += c.bytes) < budget); // stay under the 20 MB request limit
   const fields = section ? [...SECTION_BY_ID[section].fields.filter(f => f.ai), ALL_FIELDS.find(f => f.k === 'ai_observations')] : AI_FIELDS;
-  const prompt = promptFor(fields, ($('#aiContext')?.value || '').trim(), section ? SECTION_BY_ID[section].title : '', transcript);
+  const prompt = promptFor(fields, ($('#aiContext')?.value || '').trim(), section ? SECTION_BY_ID[section].title : '', transcript, audio.length);
   btn.disabled = true; $$('.sec-tools').forEach(l => l.classList.add('disabled'));
   const t0 = performance.now();
   const onStatus = m => setStatus(st, m, '', true);
   try {
     const fn = engine === 'gemini' ? analyzeGemini : engine === 'openrouter' ? analyzeOpenRouter : analyzeChrome;
-    const out = await fn(fields, list, prompt, onStatus);
+    const out = await fn(fields, list, prompt, onStatus, audio);
     let n = 0;
+    if (out && out.interview_transcript && String(out.interview_transcript).trim()) { const ta = $('#transcript'); if (!ta.value.trim() || ta.dataset.auto === '1') { ta.value = String(out.interview_transcript).trim(); ta.dataset.auto = '1'; $('#transcriptWrap').hidden = false; } }
     const allowed = new Set(fields.map(f => f.k));
     Object.entries(out || {}).forEach(([k, v]) => {
       if (!allowed.has(k) || v == null || v === '' || (Array.isArray(v) && !v.length)) return;
@@ -862,7 +830,8 @@ async function analyzePhotos(section = '', list = null) {
     });
     lastEngine = engine === 'gemini' ? settings.model : engine === 'openrouter' ? 'openrouter:' + settings.orModel : 'chrome-builtin';
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
-    setStatus(st, `${n} field${n === 1 ? '' : 's'} filled in ${secs}s from ${list.length ? `${list.length} photo(s)` : ''}${list.length && transcript ? ' + ' : ''}${transcript ? 'the transcript' : ''} — highlighted in yellow, please review.`, 'ok');
+    const src = [list.length ? `${list.length} photo(s)` : '', audio.length ? `${audio.length} recording(s)` : '', transcript && !audio.length ? 'the transcript' : ''].filter(Boolean).join(' + ');
+    setStatus(st, `${n} field${n === 1 ? '' : 's'} filled in ${secs}s from ${src} — highlighted in yellow, please review.`, 'ok');
     toast(`${n} fields filled in ${secs}s`, 'ok');
     if (section) $(`[data-section="${section}"]`).classList.remove('collapsed'); else $$('.card.collapsed').forEach(c => c.classList.remove('collapsed'));
   } catch (e) {
@@ -1091,9 +1060,7 @@ function init() {
   $('#captureInput').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
   $('#analyzeBtn').onclick = () => analyzePhotos();
   $('#recBtn').onclick = toggleRecording;
-  $('#recLang').value = settings.recLang || (navigator.language && navigator.language.includes('-') ? navigator.language : 'en-IN');
-  $('#recLang').onchange = e => { settings.recLang = e.target.value; LS.set('gs_settings', settings); };
-  $('#transcript').addEventListener('input', () => { updateAnalyzeBtn(); scheduleDraftSave(); });
+  $('#transcript').addEventListener('input', () => { $('#transcript').dataset.auto = '0'; updateAnalyzeBtn(); scheduleDraftSave(); });
   $('#transcriptClear').onclick = () => { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; updateAnalyzeBtn(); };
   $('#submitBtn').onclick = submitForm;
   $('#resetBtn').onclick = () => { if (confirm('Clear the form?')) clearForm(); };

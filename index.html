@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.9.1">
+  <link rel="stylesheet" href="styles.css?v=1.10.0">
 </head>
 <body>
   <header class="topbar">
@@ -61,19 +61,16 @@
             Capture photo
             <input type="file" id="captureInput" accept="image/*" capture="environment" hidden>
           </label>
-          <button id="recBtn" class="btn btn-outline" title="Record the interview — speech is transcribed live and used to fill the form">
+          <button id="recBtn" class="btn btn-outline" title="Record the interview in any language — Analyze & fill listens to it together with the photos">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></svg>
             <span>Record</span>
           </button>
-          <select id="recLang" class="input rec-lang" title="Speech language">
-            <option value="en-IN">English (India)</option><option value="hi-IN">हिन्दी</option><option value="bn-IN">বাংলা</option><option value="ta-IN">தமிழ்</option><option value="te-IN">తెలుగు</option><option value="mr-IN">मराठी</option><option value="gu-IN">ગુજરાતી</option><option value="kn-IN">ಕನ್ನಡ</option><option value="ml-IN">മലയാളം</option><option value="pa-IN">ਪੰਜਾਬੀ</option><option value="or-IN">ଓଡ଼ିଆ</option><option value="ur-IN">اردو</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option>
-          </select>
           <span class="photo-count" id="photoCount"></span>
           <button id="analyzeBtn" class="btn btn-primary" disabled>Analyze &amp; fill</button>
         </div>
         <div id="thumbStrip" class="thumb-strip"></div>
         <div id="transcriptWrap" hidden>
-          <textarea id="transcript" class="input" rows="3" placeholder="Interview transcript — speak with Record or type here; Analyze & fill extracts the answers"></textarea>
+          <textarea id="transcript" class="input" rows="3" placeholder="Interview transcript (filled automatically from the recording by Analyze & fill — any language; you can also type here)"></textarea>
           <div class="transcript-tools"><span id="recStatus" class="status"></span><button id="transcriptClear" class="link-btn">Clear transcript</button></div>
           <div id="audioClips" class="clips" hidden></div>
         </div>
@@ -303,11 +300,11 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=1.9.1"></script>
-  <script src="sav.js?v=1.9.1"></script>
-  <script src="exports.js?v=1.9.1"></script>
-  <script src="analysis.js?v=1.9.1"></script>
-  <script src="pdf.js?v=1.9.1"></script>
-  <script src="designer.js?v=1.9.1"></script>
+  <script src="app.js?v=1.10.0"></script>
+  <script src="sav.js?v=1.10.0"></script>
+  <script src="exports.js?v=1.10.0"></script>
+  <script src="analysis.js?v=1.10.0"></script>
+  <script src="pdf.js?v=1.10.0"></script>
+  <script src="designer.js?v=1.10.0"></script>
 </body>
 </html>
