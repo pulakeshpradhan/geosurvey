@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.17.4';
+const APP_VERSION = '1.17.5';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1089,7 +1089,7 @@ function getRecords() { return LS.get('gs_records', []); }
 function saveRecords(r) { LS.set('gs_records', r); updatePendingBadge(); if (typeof Analysis !== 'undefined') Analysis.schedule(); }
 function updatePendingBadge() {
   const n = getRecords().filter(r => r.status !== 'synced').length;
-  ['#pendingBadge', '#pendingBadge2'].forEach(s => { const b = $(s); if (b) { b.textContent = n; b.hidden = n === 0; } });
+  const b = $('#pendingBadge'); b.textContent = n; b.hidden = n === 0;
 }
 function validate() {
   let ok = true;
@@ -1554,11 +1554,12 @@ function showView(id) {
   $$('.view').forEach(v => v.hidden = v.id !== id);
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === id));
   $('#actionBar').hidden = id !== 'formView';
-  $('#dbBtn').classList.toggle('active', id === 'responsesView');
+  $('#dbBtn').classList.toggle('active', id === 'dataView');
   $('#editBtn').classList.toggle('active', id === 'editView');
   if (id === 'responsesView') { renderLocalTable(); if (settings.endpoint && navigator.onLine && !syncing && Date.now() - dbRowsAt > 60000) refreshDbRows().then(pruneSynced).then(renderLocalTable).catch(() => {}); }
   if (id === 'analysisView' && typeof Analysis !== 'undefined') Analysis.open();
-  if (id === 'editView') { if (typeof Designer !== 'undefined') Designer.open(); if (adminToken() && $('#adminPanel').hidden) adminConnect(); }
+  if (id === 'editView' && typeof Designer !== 'undefined') Designer.open();
+  if (id === 'dataView' && adminToken() && $('#adminPanel').hidden) adminConnect();
 }
 function init() {
   renderForm();
@@ -1572,7 +1573,7 @@ function init() {
 
   $$('.tab').forEach(t => t.onclick = () => showView(t.dataset.view));
   const EDIT_WHY = 'Only the admin edits the questionnaire';
-  $('#dbBtn').onclick = () => showView('responsesView');
+  $('#dbBtn').onclick = async () => { if (settings.endpoint && !adminToken() && !await requireAdmin('Viewing all collected data needs it')) return; showView('dataView'); };
   $('#editBtn').onclick = async () => { if (await requireAdmin(EDIT_WHY)) showView('editView'); };
   $('#obDesign').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); if (typeof Designer !== 'undefined') Designer.startBlank(); };
   $('#obSample').onclick = async () => { if (await requireAdmin(EDIT_WHY)) useSampleQuestionnaire(); };
