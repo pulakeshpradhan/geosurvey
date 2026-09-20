@@ -38,7 +38,7 @@ You need two things: a **free AI key** and a **Google Sheet** to store the answe
 1. Go to https://sheets.new to create a new Google Sheet. Give it a name, e.g. *Village Survey 2026*.
 2. In the Sheet menu click **Extensions → Apps Script**. A code page opens.
 3. Delete everything in that page. Open this file: [backend/Code.gs](backend/Code.gs), click the **copy icon** at the top right of the file, and paste it into the code page.
-4. In the pasted code, find the line `var ADMIN_TOKEN = 'change-me-to-a-long-secret';` and replace `change-me-to-a-long-secret` with a password of your choice (keep the quotes). This password protects the data view. Press **Ctrl+S** to save.
+4. The line `var ADMIN_TOKEN = 'GeoSurvey';` is the **team key**: whoever has it can see everyone's records (*Sync all*), delete rows and publish the questionnaire. Keep `GeoSurvey` for a trial; for a real project replace it with a password of your choice (keep the quotes). Press **Ctrl+S** to save.
 5. **Allow Drive access:** in the toolbar there is a dropdown that says `myFunction` or `doPost` — change it to **`authorizeDrive`** and click **▶ Run**.
    Google asks for permission: click **Review permissions → your account → Advanced → Go to (project name) → Allow**.
    This creates a folder **GeoSurvey Photos** in your Google Drive where photos, recordings and transcripts will be saved.
@@ -81,7 +81,7 @@ When you open the app the first time it asks how to start:
 - **Design your own** – build questions like Google Forms.
 - **Upload paper questionnaire** – upload a PDF or photos of your printed questionnaire; the app converts it to a digital form exactly as printed. Then you can press **Improve with AI** to tidy it up.
 
-You can change the questionnaire any time with the **Edit** button (top right). After editing press **Apply** (this phone) or **Publish to team** (all phones get the new questionnaire; needs the password from Step 2).
+You can change the questionnaire any time with the **Edit** button (top right). After editing press **Apply** (this phone) or **Publish to team** (all phones get the new questionnaire; needs the team key from Step 2).
 
 ---
 
@@ -107,9 +107,9 @@ Photos come only from the camera (no gallery uploads) and are stamped with time,
 
 ## Seeing the results
 
-- **Records** tab – press **Sync**: pending records go up, and **every record submitted by the whole team** comes down (rows marked *database* are from other phones; they stay visible offline). Download all of it as **CSV, JSON, SPSS (.sav)** or **KMZ** (map file for Google Earth).
+- **Records** tab – **Sync** sends this phone's pending records. **Sync all** additionally pulls **every record submitted by the whole team** — it asks once for the team key (`ADMIN_TOKEN`, default `GeoSurvey`; also in Settings → *Team key*). Rows marked *database* come from other phones and stay visible offline. Without the key a phone only ever sends its own records. Download everything shown as **CSV, JSON, SPSS (.sav)** or **KMZ** (map file for Google Earth).
 - **Analysis** tab – automatic statistics on the team data once synced (tables, charts, reliability, factor analysis, SEM…) with a plain-language report. Press **Download report** for a file you can share.
-- **Edit → Collected data** – enter the password from Step 2 to delete a wrong entry or publish the questionnaire. (To restrict the full record list to the password as well, set `TEAM_CAN_VIEW_ALL = false` in Code.gs.)
+- **Edit → Collected data** – the same team key lets you delete a wrong entry or publish the questionnaire to all phones.
 
 ---
 

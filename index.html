@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.15.2">
+  <link rel="stylesheet" href="styles.css?v=1.15.3">
 </head>
 <body>
   <header class="topbar">
@@ -105,7 +105,8 @@
         <div class="card-head">
           <div><h2>Records</h2><p class="sub" id="localSummary"></p></div>
           <div class="btn-row">
-            <button id="syncBtn" class="btn btn-primary btn-sm" title="Send pending records, then load every record submitted by the team">Sync</button>
+            <button id="syncBtn" class="btn btn-primary btn-sm" title="Send this phone's pending records to the database">Sync</button>
+            <button id="syncAllBtn" class="btn btn-outline btn-sm" title="Also load every record submitted by the whole team (needs the team key)">Sync all</button>
             <button id="uploadFilesBtn" class="btn btn-outline btn-sm" title="Re-upload photos, recordings and transcripts of synced records that are not yet in Drive">Upload files</button>
             <a id="driveFolderLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" hidden>Open Drive folder</a>
             <button id="exportCsvBtn" class="btn btn-outline btn-sm">Export CSV</button>
@@ -289,6 +290,10 @@
           <small>Follow the <a href="guide/" target="_blank" rel="noopener">step-by-step setup slides</a> (or the <a href="https://github.com/pulakeshpradhan/geosurvey#readme" target="_blank" rel="noopener">written guide</a>). Blank = keep data on this device only. After editing Code.gs always deploy a <b>new version</b>.</small>
         </label>
         <div class="btn-row"><button type="button" id="testDbBtn" class="btn btn-outline btn-sm">Test database</button><button type="button" id="teamLinkBtn" class="btn btn-outline btn-sm" title="A link that connects any phone to this database when opened" hidden>Copy team link</button><span id="testDbStatus" class="status" style="margin:0"></span></div>
+        <label>Team key (optional — unlocks the whole team's records)
+          <input type="password" id="setTeamKey" class="input" placeholder="e.g. GeoSurvey" autocomplete="off">
+          <small>The <code>ADMIN_TOKEN</code> in Code.gs (default <code>GeoSurvey</code>). With it, <b>Sync all</b> in Records shows every record submitted by the team; without it this phone only sends its own records.</small>
+        </label>
         <label>Enumerator name (default)
           <input type="text" id="setSurveyor" class="input">
         </label>
@@ -321,12 +326,12 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.15.2"></script>
-  <script src="app.js?v=1.15.2"></script>
-  <script src="sav.js?v=1.15.2"></script>
-  <script src="exports.js?v=1.15.2"></script>
-  <script src="analysis.js?v=1.15.2"></script>
-  <script src="pdf.js?v=1.15.2"></script>
-  <script src="designer.js?v=1.15.2"></script>
+  <script src="config.js?v=1.15.3"></script>
+  <script src="app.js?v=1.15.3"></script>
+  <script src="sav.js?v=1.15.3"></script>
+  <script src="exports.js?v=1.15.3"></script>
+  <script src="analysis.js?v=1.15.3"></script>
+  <script src="pdf.js?v=1.15.3"></script>
+  <script src="designer.js?v=1.15.3"></script>
 </body>
 </html>

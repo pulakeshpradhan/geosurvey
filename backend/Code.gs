@@ -8,7 +8,7 @@
  * SETUP (≈2 minutes)
  *  1. Create a new Google Sheet (sheets.new).
  *  2. Extensions → Apps Script. Delete the default code, paste this file.
- *  3. Set ADMIN_TOKEN below to a long secret of your choice. Save.
+ *  3. Optionally change ADMIN_TOKEN below (the team key; default 'GeoSurvey'). Save.
  *  4. Run the function "authorizeDrive" once (▶ Run) and allow Sheets + Drive access.
  *  5. Deploy → New deployment → Type: "Web app"
  *       Execute as: Me            Who has access: Anyone
@@ -21,8 +21,9 @@
  * Duplicate submission ids (offline re-sync) are ignored. Re-deploy after editing this file
  * (Deploy → Manage deployments → Edit → Version: New).
  *
- * Sync on any phone also pulls every row of the sheet (all enumerators) into its Records tab — read-only, no token
- * (set TEAM_CAN_VIEW_ALL = false to require the admin token for that). Deleting rows always needs ADMIN_TOKEN.
+ * "Sync all" in the app pulls every row of the sheet (all enumerators) into a phone's Records tab — only with the
+ * team key ADMIN_TOKEN (default 'GeoSurvey'; change it for a real project). Without the key a phone can only send
+ * its own records. Deleting rows and publishing the questionnaire also need the key.
  *
  * OPTIONAL — GEMMA 4 PHOTO ANALYSIS FOR THE WHOLE TEAM (enumerators need no key on their phones)
  *  Get one free key at https://aistudio.google.com/app/apikey, paste it into AI_KEY below (or add a Script
@@ -30,10 +31,9 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.15.2';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.15.3';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
-var TEAM_CAN_VIEW_ALL = true;                      // every phone with the endpoint sees all records on Sync (read-only); false = admin token only
 
 /**
  * ONE-TIME DRIVE AUTHORISATION (needed once per script):
@@ -46,7 +46,7 @@ function authorizeDrive() {
   var ss = ss_(); getSheet_(); configSheet_();
   Logger.log('Drive authorised. Folder: ' + f.getUrl() + ' | Sheet: ' + ss.getUrl());
 }
-var ADMIN_TOKEN = 'change-me-to-a-long-secret';   // <-- REQUIRED for the Admin tab
+var ADMIN_TOKEN = 'GeoSurvey';                     // <-- team key: "Sync all", delete rows, publish the questionnaire. Change it for a real project.
 var SHEET_NAME = 'Responses';
 var PHOTO_FOLDER = 'GeoSurvey Photos';
 var SHEET_ID = ''; // Optional: spreadsheet ID if this script is NOT bound to the sheet.
@@ -83,7 +83,7 @@ function getSheet_() {
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
-function isAdmin_(token) { return ADMIN_TOKEN && ADMIN_TOKEN !== 'change-me-to-a-long-secret' && token === ADMIN_TOKEN; }
+function isAdmin_(token) { return !!ADMIN_TOKEN && String(token || '') === ADMIN_TOKEN; }
 function headers_(sh) {
   var lastCol = Math.max(sh.getLastColumn(), 1);
   return sh.getRange(1, 1, 1, lastCol).getValues()[0].filter(String);
@@ -187,9 +187,8 @@ function doGet(e) {
     var sh = getSheet_();
     var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
     if (p.action === 'list') {
-      var admin = isAdmin_(p.token);
-      if (!admin && !TEAM_CAN_VIEW_ALL) return json_({ ok: false, error: p.token ? 'Invalid admin token' : 'TEAM_VIEW_OFF' });
-      var sheetUrl = admin ? ss_().getUrl() : '';
+      if (!isAdmin_(p.token)) return json_({ ok: false, error: p.token ? 'Invalid admin token' : 'NO_TOKEN', version: BACKEND_VERSION });
+      var sheetUrl = ss_().getUrl();
       if (lastRow < 2) return json_({ ok: true, total: 0, rows: [], sheetUrl: sheetUrl, version: BACKEND_VERSION });
       var limit = Math.min(parseInt(p.limit || 500, 10), 5000);
       var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];

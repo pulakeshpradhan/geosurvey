@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.2';
+const APP_VERSION = '1.15.3';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1091,16 +1091,17 @@ async function uploadMissingFiles() {
 }
 const filesMissing = r => ((r.photo_count > 0 && !(r.photo_urls || '').includes('drive.google.com')) || (r.audio_count > 0 && !(r.audio_urls || '').includes('drive.google.com')) || (r.interview_transcript && !(r.transcript_url || '').includes('drive.google.com')));
 let syncing = false;
-/** manual = pressed by the user (always refreshes the team list and reports); automatic runs stay quiet. */
-async function syncPending(manual = true) {
+/** Send this device's pending records. all = also pull every team record (needs the team key); manual runs report, automatic ones stay quiet. */
+async function syncPending(manual = true, all = false) {
   if (syncing) return;
   const records = getRecords(); const pending = records.filter(r => r.status !== 'synced');
-  if (!settings.endpoint) { renderLocalTable(); if (pending.length) toast(`${pending.length} record(s) kept on device — set a database endpoint in Settings to sync.`); return; }
+  if (!settings.endpoint) { renderLocalTable(); if (pending.length || manual) toast(pending.length ? `${pending.length} record(s) kept on device — set a database endpoint in Settings to sync.` : 'Set a database endpoint in Settings first'); return; }
   if (!navigator.onLine) { renderLocalTable(); if (manual) toast('Offline — will sync when the connection returns.'); return; }
-  // Automatic runs (after Submit, on reconnect) re-pull the whole sheet at most every 10 minutes to spare mobile data
-  const wantList = manual || Date.now() - teamRowsAt > 600000;
-  if (!pending.length && !wantList) return renderLocalTable();
-  syncing = true; $('#syncBtn').disabled = true;
+  if (all && !adminToken() && !askTeamKey()) return;
+  // Automatic runs (after Submit, on reconnect) refresh the team list only with a key and at most every 10 minutes
+  const wantList = all || (!manual && !!adminToken() && Date.now() - teamRowsAt > 600000);
+  if (!pending.length && !wantList) { renderLocalTable(); if (manual) toast('Nothing pending — all records on this device are in the database', 'ok'); return; }
+  syncing = true; $('#syncBtn').disabled = true; $('#syncAllBtn').disabled = true;
   let ok = 0, fail = 0;
   for (const rec of pending) {
     try { const j = await sendRecord(rec); rec.status = 'synced'; delete rec.error; if (j.photo_urls) rec.photo_urls = j.photo_urls; if (j.audio_urls) rec.audio_urls = j.audio_urls; if (j.transcript_url) rec.transcript_url = j.transcript_url; ok++; }
@@ -1113,21 +1114,32 @@ async function syncPending(manual = true) {
     try { const n = await refreshTeamRows(); if (manual) toast(`${n} record(s) in the team database`, 'ok'); }
     catch (e) { if (manual) toast('Could not load the team records: ' + e.message, 'err'); }
   }
-  syncing = false; $('#syncBtn').disabled = false; renderLocalTable();
+  syncing = false; $('#syncBtn').disabled = false; $('#syncAllBtn').disabled = false; renderLocalTable();
 }
 
-/* Every row of the Google Sheet (all enumerators), pulled on Sync and cached in IndexedDB for offline viewing. */
+/* Every row of the Google Sheet (all enumerators): "Sync all" with the team key, cached in IndexedDB for offline viewing. */
 let teamRows = [], teamRowsAt = 0;
 const TEAM_CACHE_KEY = '__team_rows';
+/** Ask for the team key once and keep it in Settings. Returns false when the user cancels. */
+function askTeamKey() {
+  const k = prompt('Team key (set as ADMIN_TOKEN in the Apps Script; the default is "GeoSurvey"). It unlocks the records of the whole team on this phone:', settings.adminKey || '');
+  if (k === null) return false;
+  settings.adminKey = k.trim(); LS.set('gs_settings', settings);
+  return !!settings.adminKey;
+}
 async function loadTeamCache() {
   try { const c = await PhotoDB.getKV(TEAM_CACHE_KEY); if (c && c.endpoint === settings.endpoint) { teamRows = c.rows || []; teamRowsAt = c.at || 0; } } catch {}
 }
 async function refreshTeamRows() {
   if (!settings.endpoint) throw new Error('No database endpoint configured (Settings)');
-  const q = new URLSearchParams({ action: 'list', limit: 5000 }); if (adminToken()) q.set('token', adminToken());
+  if (!adminToken()) throw new Error('the team key is needed — press "Sync all" and enter it');
+  const q = new URLSearchParams({ action: 'list', limit: 5000, token: adminToken() });
   const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q);
   const j = await r.json().catch(() => ({}));
-  if (!j.ok) throw new Error(j.error === 'TEAM_VIEW_OFF' ? 'the admin has limited the full list to the admin token (Edit → Collected data)' : j.error === 'Invalid admin token' ? 'the backend is an old Code.gs — deploy the latest version to let the team see all records' : j.error || `HTTP ${r.status}`);
+  if (!j.ok) {
+    if (j.error === 'Invalid admin token') { settings.adminKey = ''; LS.set('gs_settings', settings); sessionStorage.removeItem('gs_admin'); throw new Error('team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)'); }
+    throw new Error(j.error || `HTTP ${r.status}`);
+  }
   teamRows = j.rows || []; teamRowsAt = Date.now();
   PhotoDB.putKV(TEAM_CACHE_KEY, { rows: teamRows, at: teamRowsAt, endpoint: settings.endpoint }).catch(() => {});
   if (typeof Analysis !== 'undefined') Analysis.schedule();
@@ -1148,7 +1160,7 @@ function renderLocalTable() {
   const parts = [];
   if (local.length) parts.push(`${local.length} on this device (${synced} synced, ${local.length - synced} pending or failed)`);
   if (teamRowsAt) parts.push(`${team} more from the team database (${teamRows.length} rows in total, as of ${fmtDate(new Date(teamRowsAt).toISOString())})`);
-  else if (settings.endpoint) parts.push('press Sync to load every record submitted by the team');
+  else if (settings.endpoint) parts.push(adminToken() ? 'press Sync all to load every record submitted by the team' : 'Sync all shows the whole team\'s records if you have the team key');
   $('#localSummary').textContent = parts.length ? parts.join(' · ') + '.' : 'No submissions on this device yet.';
   const link = $('#driveFolderLink'); if (link) { link.hidden = !settings.folderUrl; link.href = settings.folderUrl || '#'; }
   const driveLinks = r => `${String(r.photo_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Photo ${i + 1}">📷</a>`).join('')}${String(r.audio_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Audio ${i + 1}">🎙</a>`).join('')}${(r.transcript_url || '').includes('drive') ? `<a href="${esc(r.transcript_url)}" target="_blank" rel="noopener" title="Transcript">📝</a>` : ''}`;
@@ -1187,7 +1199,7 @@ function renderLocalTable() {
 /* Admin panel (token-protected, served by the Apps Script backend)     */
 /* ------------------------------------------------------------------ */
 let adminRows = [];
-function adminToken() { return sessionStorage.getItem('gs_admin') || ''; }
+function adminToken() { return sessionStorage.getItem('gs_admin') || settings.adminKey || ''; }
 async function adminFetch(params) {
   if (!settings.endpoint) throw new Error('No database endpoint configured (Settings)');
   const q = new URLSearchParams({ ...params, token: adminToken() });
@@ -1203,7 +1215,7 @@ async function adminPost(payload) {
 async function publishSchema(schema) { return adminPost({ action: 'setSchema', schema }); }
 async function adminConnect() {
   const st = $('#adminStatus');
-  sessionStorage.setItem('gs_admin', $('#adminToken').value.trim());
+  sessionStorage.setItem('gs_admin', $('#adminToken').value.trim() || adminToken());
   setStatus(st, 'Connecting…', '', true);
   try { await adminLoad(); $('#adminLogin').hidden = true; $('#adminPanel').hidden = false; setStatus(st, ''); }
   catch (e) { setStatus(st, e.message, 'err'); sessionStorage.removeItem('gs_admin'); }
@@ -1251,7 +1263,7 @@ function openSettings() {
   $('#setOrKey').value = settings.orKey; $('#setOrModel').value = settings.orModel; $('#setGemmaModel').value = settings.gemmaModel;
   const known = KNOWN_MODELS.includes(settings.model);
   $('#setModel').value = known ? settings.model : 'custom'; $('#setModelCustom').hidden = known; $('#setModelCustom').value = known ? '' : settings.model;
-  $('#setEndpoint').value = settings.endpoint; $('#setSurveyor').value = settings.surveyor;
+  $('#setEndpoint').value = settings.endpoint; $('#setTeamKey').value = settings.adminKey || ''; $('#setSurveyor').value = settings.surveyor;
   $('#setMaxDim').value = settings.maxDim; $('#setRecLang').value = settings.recLang || ''; $('#setStamp').checked = settings.stamp; $('#setUploadPhotos').checked = settings.uploadPhotos; $('#setSampleTools').checked = settings.sampleTools;
   updateEndpointHint();
   $('#settingsDlg').returnValue = ''; // Escape keeps the previous value otherwise, which could re-save
@@ -1274,7 +1286,7 @@ function saveSettings(quiet = false) {
     orKey: $('#setOrKey').value.trim(), orModel: $('#setOrModel').value.trim() || DEFAULT_SETTINGS.orModel,
     gemmaModel: $('#setGemmaModel').value || DEFAULT_SETTINGS.gemmaModel,
     endpoint, endpointSource: !endpoint ? '' : endpoint === prev.endpoint ? prev.endpointSource : endpoint === TEAM_ENDPOINT ? 'team' : 'user',
-    surveyor: $('#setSurveyor').value.trim(),
+    adminKey: $('#setTeamKey').value.trim(), surveyor: $('#setSurveyor').value.trim(),
     maxDim: +$('#setMaxDim').value, recLang: $('#setRecLang').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
     folderUrl: endpoint === prev.endpoint ? prev.folderUrl || '' : '',
   };
@@ -1297,7 +1309,7 @@ function showView(id) {
   $('#actionBar').hidden = id !== 'formView';
   $('#pdfBtn').hidden = id !== 'formView';
   $('#editBtn').classList.toggle('active', id === 'editView');
-  if (id === 'responsesView') { renderLocalTable(); if (settings.endpoint && navigator.onLine && !syncing && Date.now() - teamRowsAt > 60000) refreshTeamRows().then(renderLocalTable).catch(() => {}); }
+  if (id === 'responsesView') { renderLocalTable(); if (settings.endpoint && adminToken() && navigator.onLine && !syncing && Date.now() - teamRowsAt > 60000) refreshTeamRows().then(renderLocalTable).catch(() => {}); }
   if (id === 'analysisView' && typeof Analysis !== 'undefined') Analysis.open();
   if (id === 'editView') { if (typeof Designer !== 'undefined') Designer.open(); if (adminToken() && $('#adminPanel').hidden) adminConnect(); }
 }
@@ -1356,6 +1368,7 @@ function init() {
   $('#submitBtn').onclick = submitForm;
   $('#resetBtn').onclick = () => { if (confirm('Clear the form?')) clearForm(); };
   $('#syncBtn').onclick = () => syncPending(true);
+  $('#syncAllBtn').onclick = () => syncPending(true, true);
   $('#uploadFilesBtn').onclick = uploadMissingFiles;
   $('#testDbBtn').onclick = async e => {
     e.preventDefault(); const st = $('#testDbStatus'); const saved = settings; saveSettings(true); setStatus(st, 'Checking…', '', true);
