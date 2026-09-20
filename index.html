@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.15.9">
+  <link rel="stylesheet" href="styles.css?v=1.16.0">
 </head>
 <body>
   <header class="topbar">
@@ -52,6 +52,7 @@
           <button class="ob-tile" id="obDesign"><span class="ob-ic">✎</span><b>Design your own</b><span>Build sections and questions in a form-style editor.</span></button>
           <button class="ob-tile" id="obSample"><span class="ob-ic">▤</span><b>Use sample questionnaire</b><span>Socio-economic household survey with 5 perception constructs, ready for SEM.</span></button>
           <button class="ob-tile" id="obUpload"><span class="ob-ic">⇪</span><b>Upload paper questionnaire</b><span>PDF or photos — converted exactly as printed; improve with AI afterwards if you wish.</span></button>
+          <label class="ob-tile" id="obProject"><span class="ob-ic">▣</span><b>Open a project file</b><span>A <code>.geosurvey</code> file from your admin — installs the questionnaire and connects this phone to the team database in one go.</span><input type="file" id="projectInput" accept=".geosurvey,application/json" hidden></label>
         </div>
       </div>
 
@@ -158,8 +159,8 @@
           <span class="gsep"></span>
           <button id="designerSample" class="gbtn" title="Load the sample questionnaire">Sample</button>
           <button id="designerReset" class="gbtn" title="Start from a blank questionnaire">Blank</button>
-          <label class="gbtn" title="Import questionnaire JSON">Import<input type="file" id="designerImport" accept="application/json" hidden></label>
-          <button id="designerExport" class="gbtn" title="Export questionnaire JSON">Export</button>
+          <label class="gbtn" title="Open a .geosurvey project file or questionnaire JSON into the draft">Open file<input type="file" id="designerImport" accept=".geosurvey,application/json" hidden></label>
+          <button id="designerExport" class="gbtn" title="Save the draft as a .geosurvey project file (questionnaire + team connection)">Save project file</button>
         </div>
       </div>
       <div id="designerIntake" hidden><div id="designerPages" class="thumb-strip"></div></div>
@@ -289,9 +290,9 @@
         <label>Database endpoint (Apps Script Web App URL)
           <input type="url" id="setEndpoint" class="input" placeholder="https://script.google.com/macros/s/…/exec">
           <small id="endpointHint" class="hint-team" hidden></small>
-          <small>Follow the <a href="guide/" target="_blank" rel="noopener">step-by-step setup slides</a> (or the <a href="https://github.com/pulakeshpradhan/geosurvey#readme" target="_blank" rel="noopener">written guide</a>). Blank = keep data on this device only. After editing Code.gs always deploy a <b>new version</b>.</small>
+          <small>Follow the <a href="guide/" target="_blank" rel="noopener">step-by-step setup slides</a> (or the <a href="https://github.com/pulakeshpradhan/geosurvey#readme" target="_blank" rel="noopener">written guide</a>). Blank = keep data on this device only. The backend updates itself; after editing Code.gs run <code>updateBackend</code>.</small>
         </label>
-        <div class="btn-row"><button type="button" id="testDbBtn" class="btn btn-outline btn-sm">Test database</button><button type="button" id="teamLinkBtn" class="btn btn-outline btn-sm" title="A link that connects any phone to this database when opened" hidden>Copy team link</button><span id="testDbStatus" class="status" style="margin:0"></span></div>
+        <div class="btn-row"><button type="button" id="testDbBtn" class="btn btn-outline btn-sm">Test database</button><button type="button" id="teamLinkBtn" class="btn btn-outline btn-sm" title="A link that connects any phone to this database when opened" hidden>Copy team link</button><button type="button" id="projectDlBtn" class="btn btn-outline btn-sm" title="Download a .geosurvey project file: the questionnaire plus the team connection. Open it on any phone from the start page.">Save project file</button><span id="testDbStatus" class="status" style="margin:0"></span></div>
         <label>Team key (optional — unlocks the whole team's records)
           <input type="password" id="setTeamKey" class="input" placeholder="e.g. GeoSurvey" autocomplete="off">
           <small>The <code>ADMIN_TOKEN</code> in Code.gs (default <code>GeoSurvey</code>). With it, <b>Sync all</b> in Records shows every record submitted by the team; without it this phone only sends its own records.</small>
@@ -327,17 +328,17 @@
     </svg>
     <div class="welcome">
       <div class="welcome-head"><img src="icon.svg" alt="" width="30" height="30"><div><h2>GeoSurvey</h2><p>Field surveys, done differently.</p></div></div>
-      <div class="cmp">
-        <div class="cmp-h"></div><div class="cmp-h geo">Geo<br>Survey</div><div class="cmp-h" title="Google Forms">Forms</div><div class="cmp-h" title="KoboToolbox">Kobo</div>
-        <div>AI fills the form from photos &amp; voice</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-no"/></svg>
-        <div>Paper questionnaire → digital, by AI</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-no"/></svg>
-        <div>Auto GPS, address &amp; stamped photos</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic" title="GPS only"><use href="#i-part"/></svg>
-        <div>Works offline</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-yes"/></svg>
-        <div>Data in your own Google Sheet &amp; Drive</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic" title="Sheet only"><use href="#i-part"/></svg><svg class="ic"><use href="#i-no"/></svg>
-        <div>Statistics, SEM &amp; report built in</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic" title="Basic"><use href="#i-part"/></svg>
-        <div>SPSS · KMZ · PDF export</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic" title="CSV only"><use href="#i-part"/></svg><svg class="ic" title="CSV / XLS"><use href="#i-part"/></svg>
-        <div>No install, no account, free</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-yes"/></svg><svg class="ic" title="App + account"><use href="#i-part"/></svg>
-      </div>
+      <div class="cmp-wrap"><div class="cmp">
+        <div class="row head"><div></div><div class="geo" title="GeoSurvey"><img src="icon.svg" alt="GeoSurvey" width="18" height="18"></div><div title="Google Forms">Forms</div><div title="KoboToolbox">Kobo</div></div>
+        <div class="row"><div>AI fills the form from photos &amp; voice</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-no"/></svg></div>
+        <div class="row"><div>Paper questionnaire → digital, by AI</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-no"/></svg></div>
+        <div class="row"><div>Auto GPS, address &amp; stamped photos</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><title>GPS only</title><use href="#i-part"/></svg></div>
+        <div class="row"><div>Works offline</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-yes"/></svg></div>
+        <div class="row"><div>Data in your own Google Sheet &amp; Drive</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><title>Sheet only</title><use href="#i-part"/></svg><svg class="ic"><use href="#i-no"/></svg></div>
+        <div class="row"><div>Statistics, SEM &amp; report built in</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><title>Basic</title><use href="#i-part"/></svg></div>
+        <div class="row"><div>SPSS · KMZ · PDF export</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><title>CSV only</title><use href="#i-part"/></svg><svg class="ic"><title>CSV / XLS</title><use href="#i-part"/></svg></div>
+        <div class="row"><div>No install, no account, free</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><title>App + account</title><use href="#i-part"/></svg></div>
+      </div></div>
       <div class="welcome-foot">
         <a class="credit" href="https://pulakeshpradhan.github.io/" target="_blank" rel="noopener">Created by <b>Pulakesh Pradhan</b></a>
         <button type="button" id="welcomeClose" class="btn btn-primary btn-sm" autofocus>Get started</button>
@@ -371,13 +372,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.15.9"></script>
-  <script src="qr.js?v=1.15.9"></script>
-  <script src="app.js?v=1.15.9"></script>
-  <script src="sav.js?v=1.15.9"></script>
-  <script src="exports.js?v=1.15.9"></script>
-  <script src="analysis.js?v=1.15.9"></script>
-  <script src="pdf.js?v=1.15.9"></script>
-  <script src="designer.js?v=1.15.9"></script>
+  <script src="config.js?v=1.16.0"></script>
+  <script src="qr.js?v=1.16.0"></script>
+  <script src="app.js?v=1.16.0"></script>
+  <script src="sav.js?v=1.16.0"></script>
+  <script src="exports.js?v=1.16.0"></script>
+  <script src="analysis.js?v=1.16.0"></script>
+  <script src="pdf.js?v=1.16.0"></script>
+  <script src="designer.js?v=1.16.0"></script>
 </body>
 </html>

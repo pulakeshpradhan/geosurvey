@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.9';
+const APP_VERSION = '1.16.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -257,6 +257,33 @@ function openTeamQr() {
   if (!link) { $('#qrSub').textContent = 'Set the database endpoint in Settings first — the team link is built from it automatically.'; $('#qrCode').innerHTML = ''; $('#qrLink').textContent = ''; }
   else { $('#qrSub').textContent = 'Point the phone camera at this code: the app opens already connected to this database, nothing to type.'; $('#qrCode').innerHTML = QR.svg(link); $('#qrLink').textContent = link; }
   $('#qrDlg').showModal();
+}
+/* ---- Project file (.geosurvey): the questionnaire plus the team connection in one portable JSON file ---- */
+const PROJECT_FORMAT = 'geosurvey-project';
+function projectFile(schema = currentSchema()) {
+  return { format: PROJECT_FORMAT, version: 1, app: APP_VERSION, saved_at: new Date().toISOString(), title: schema.title || FORM_META.title, endpoint: settings.endpoint || '', teamLink: teamLink(), recLang: settings.recLang || '', schema };
+}
+const projectFileName = title => `${String(title || 'GeoSurvey').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'GeoSurvey'}.geosurvey`;
+function downloadProject(schema) { const p = projectFile(schema); download(projectFileName(p.title), JSON.stringify(p, null, 2), 'application/json'); toast('Project file saved — keep it safe; it restores the questionnaire and the team connection', 'ok'); }
+/** Read a .geosurvey (or plain questionnaire JSON) file. Returns { schema, endpoint, recLang } or throws. */
+async function parseProjectFile(file) {
+  let p; try { p = JSON.parse(await file.text()); } catch { throw new Error('not a GeoSurvey project file'); }
+  const schema = p.format === PROJECT_FORMAT ? p.schema : Array.isArray(p.sections) ? p : null;
+  if (!schema || !Array.isArray(schema.sections)) throw new Error('not a GeoSurvey project file');
+  return { schema, endpoint: p.format === PROJECT_FORMAT && ENDPOINT_RE.test(p.endpoint || '') ? p.endpoint : '', recLang: p.recLang || '' };
+}
+/** Start-page action: install the questionnaire and connect to the team database from a project file. */
+async function openProjectFile(file) {
+  try {
+    const { schema, endpoint, recLang } = await parseProjectFile(file);
+    const parts = [`questionnaire "${schema.title || 'untitled'}" installed`];
+    if (endpoint && setEndpoint(endpoint, 'link')) parts.push('connected to the team database');
+    if (recLang) { settings.recLang = recLang; LS.set('gs_settings', settings); }
+    const s = { ...schema, version: schema.version || Date.now() };
+    LS.set('gs_schema', s); applySchema(s);
+    toast('Project opened — ' + parts.join(', '), 'ok');
+    updateEngineChip(); probeBackend(); autoLocate();
+  } catch (e) { toast('Could not open the file: ' + e.message, 'err'); }
 }
 /** Adopt the endpoint from a ?db= link or from config.js unless the enumerator typed their own. */
 function resolveEndpoint() {
@@ -1294,13 +1321,23 @@ async function adminPost(payload) {
   const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Request failed');
   return j;
 }
-async function publishSchema(schema) { return adminPost({ action: 'setSchema', schema }); }
+const appUrl = () => location.origin + location.pathname;
+/** Publish to every phone; the backend also writes <title>.geosurvey into the Drive folder. */
+async function publishSchema(schema) { return adminPost({ action: 'setSchema', schema, appUrl: appUrl(), endpoint: settings.endpoint }); }
+/** Back the questionnaire up to Drive without publishing it (needs the team key; silent when unavailable). */
+async function backupProject(schema) {
+  if (!settings.endpoint || !adminToken() || !navigator.onLine) return null;
+  try { return await adminPost({ action: 'saveProject', schema, appUrl: appUrl(), endpoint: settings.endpoint }); } catch { return null; }
+}
 async function adminConnect() {
   const st = $('#adminStatus');
   sessionStorage.setItem('gs_admin', $('#adminToken').value.trim() || adminToken());
   setStatus(st, 'Connecting…', '', true);
-  try { await adminLoad(); $('#adminLogin').hidden = true; $('#adminPanel').hidden = false; setStatus(st, ''); }
-  catch (e) { setStatus(st, e.message, 'err'); sessionStorage.removeItem('gs_admin'); }
+  try { await adminLoad(); $('#adminLogin').hidden = true; $('#adminPanel').hidden = false; setStatus(st, ''); if (!settings.adminKeyOk) { settings.adminKeyOk = true; LS.set('gs_settings', settings); } }
+  catch (e) {
+    setStatus(st, e.message, 'err'); sessionStorage.removeItem('gs_admin');
+    if (/Invalid admin token/i.test(e.message)) { settings.adminKey = ''; settings.adminKeyOk = false; LS.set('gs_settings', settings); } // the key changed on the backend
+  }
 }
 async function adminLoad() {
   const j = await adminFetch({ action: 'list', limit: 5000 });
@@ -1412,6 +1449,8 @@ function init() {
   $('#obDesign').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); if (typeof Designer !== 'undefined') Designer.startBlank(); };
   $('#obSample').onclick = async () => { if (await requireAdmin(EDIT_WHY)) useSampleQuestionnaire(); };
   $('#obUpload').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); $('#designerFile').click(); };
+  $('#projectInput').onchange = e => { if (e.target.files[0]) openProjectFile(e.target.files[0]); e.target.value = ''; };
+  $('#projectDlBtn').onclick = e => { e.preventDefault(); if (!SECTIONS.length) return toast('No questionnaire yet — choose or design one first'); downloadProject(); };
   probeBackend();
   $('#settingsBtn').onclick = openSettings;
   $('#setModel').onchange = e => { $('#setModelCustom').hidden = e.target.value !== 'custom'; };

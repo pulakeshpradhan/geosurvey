@@ -127,45 +127,23 @@
   <!-- 1 -->
   <section class="slide single active">
     <div>
-      <div class="eyebrow">Step-by-step · about 10 minutes, once</div>
+      <div class="eyebrow">Step-by-step · about 5 minutes, once</div>
       <h1>Set up GeoSurvey for your team</h1>
-      <p class="lead">Two things make the app work: a free AI key (so photos and recordings fill the form) and a Google Sheet (where every answer, photo and recording is saved). This guide shows every click.</p>
+      <p class="lead">One Google Sheet becomes the database. Phones connect by scanning a QR code. AI photo-fill is optional and can be switched on for the whole team with a single key. This guide shows every click.</p>
       <div class="flow">
-        <div class="box">1 · AI key<small>Google AI Studio · 2 min</small></div><div class="arr">→</div>
-        <div class="box">2 · Google Sheet<small>Apps Script · 5 min</small></div><div class="arr">→</div>
-        <div class="box">3 · App settings<small>on each phone · 1 min</small></div>
+        <div class="box">1 · Google Sheet<small>Apps Script · 4 min · once</small></div><div class="arr">→</div>
+        <div class="box">2 · Connect phones<small>scan a QR · seconds each</small></div><div class="arr">→</div>
+        <div class="box">3 · AI (optional)<small>one free key · 1 min</small></div>
       </div>
-      <p style="margin-top:18px"><b>You need:</b> a Google account, a computer for steps 1–2, and the phones that will collect data. Use <kbd>→</kbd> / <kbd>←</kbd> or swipe to move between slides.</p>
+      <p style="margin-top:18px"><b>You need:</b> a Google account, a computer for step 1, and the phones that will collect data. Use <kbd>→</kbd> / <kbd>←</kbd> or swipe to move between slides.</p>
+      <div class="note good">After step 1 the backend keeps itself up to date — you never paste code or press “New version” again.</div>
     </div>
   </section>
 
   <!-- 2 -->
   <section class="slide">
     <div>
-      <div class="eyebrow">Step 1 of 4 <span class="time">2 min</span></div>
-      <h2>Get the free AI key</h2>
-      <ol class="steps">
-        <li><b class="n">1</b><span>Open <code>aistudio.google.com/app/apikey</code> and sign in with your Google account.</span></li>
-        <li><b class="n">2</b><span>Click <kbd>Create API key</kbd>.</span></li>
-        <li><b class="n">3</b><span>Click <kbd>Copy</kbd>. The key starts with <code>AIza</code>. Paste it somewhere safe (a note) — you need it in Step 3.</span></li>
-      </ol>
-      <div class="note">Treat the key like a password. Do not post it publicly. You can create a new one any time.</div>
-    </div>
-    <div class="mock">
-      <div class="bar"><i></i><i></i><i></i><span class="url">aistudio.google.com/app/apikey</span></div>
-      <div class="body">
-        <div class="row"><b>API keys</b></div>
-        <div class="row"><span class="mb p click">+ Create API key</span></div>
-        <div class="field"><span>Your key</span><div>AIzaSyD4f…9xQ</div></div>
-        <div class="row"><span class="mb">Copy</span><span class="status ok">Key created</span></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 3 -->
-  <section class="slide">
-    <div>
-      <div class="eyebrow">Step 2 of 4 · part A <span class="time">1 min</span></div>
+      <div class="eyebrow">Step 1 · part A <span class="time">1 min</span></div>
       <h2>Create the Google Sheet and open Apps Script</h2>
       <ol class="steps">
         <li><b class="n">1</b><span>Go to <code>sheets.new</code> — a new Google Sheet opens. Name it, e.g. <b>Village Survey 2026</b>.</span></li>
@@ -182,44 +160,45 @@
     </div>
   </section>
 
-  <!-- 4 -->
+  <!-- 3 -->
   <section class="slide">
     <div>
-      <div class="eyebrow">Step 2 of 4 · part B <span class="time">1 min</span></div>
-      <h2>Paste the code and set your password</h2>
+      <div class="eyebrow">Step 1 · part B <span class="time">2 min</span></div>
+      <h2>Paste the code and the manifest; set the team key</h2>
       <ol class="steps">
-        <li><b class="n">1</b><span>Open <code>github.com/pulakeshpradhan/geosurvey</code> → folder <b>backend</b> → file <b>Code.gs</b>. Click the <b>copy</b> icon at the top right of the file.</span></li>
-        <li><b class="n">2</b><span>Paste into the empty Apps Script page.</span></li>
-        <li><b class="n">3</b><span>Near the top find the line with <code>ADMIN_TOKEN</code>. Replace <code>change-me-to-a-long-secret</code> with a password of your choice. Keep the quotes.</span></li>
+        <li><b class="n">1</b><span>Open <code>github.com/pulakeshpradhan/geosurvey</code> → folder <b>backend</b> → <b>Code.gs</b> → copy icon. Paste into the empty code page.</span></li>
+        <li><b class="n">2</b><span>Click the <b>gear</b> (Project Settings) on the left → tick <b>Show “appsscript.json” manifest file in editor</b>. Back in the editor (<code>&lt; &gt;</code>) click <b>appsscript.json</b>, delete its text and paste <b>backend/appsscript.json</b> from GitHub.</span></li>
+        <li><b class="n">3</b><span>In Code.gs find <code>var ADMIN_TOKEN = 'GeoSurvey';</code> — this is the <b>team key</b>. Keep it for a trial; for a real project replace <code>GeoSurvey</code> with your own key (keep the quotes).</span></li>
         <li><b class="n">4</b><span>Press <kbd>Ctrl</kbd>+<kbd>S</kbd> to save.</span></li>
       </ol>
-      <div class="note good">This password later opens the “Collected data” view and lets you publish questionnaires to all phones.</div>
+      <div class="note good">The team key unlocks “Sync all”, “Edit” and deleting records. Enumerators who only collect data never need it.</div>
     </div>
     <div class="mock">
       <div class="bar"><i></i><i></i><i></i><span class="url">script.google.com · Code.gs</span></div>
       <div class="body">
-        <div class="code">var BACKEND_VERSION = '1.14.1';
-var ADMIN_TOKEN = '<span class="h">MySurvey2026!</span>';   // your password
+        <div class="code">var BACKEND_VERSION = '1.16.0';
+var AI_KEY = '';                  // optional, step 3
+var ADMIN_TOKEN = '<span class="h">GeoSurvey</span>';     // team key
 var SHEET_NAME = 'Responses';
-var PHOTO_FOLDER = 'GeoSurvey Photos';
 …</div>
+        <div class="row"><span class="pick">Code.gs</span><span class="pick click">appsscript.json</span></div>
         <div class="row"><span class="mb">💾 Save (Ctrl+S)</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 5 -->
+  <!-- 4 -->
   <section class="slide">
     <div>
-      <div class="eyebrow">Step 2 of 4 · part C <span class="time">1 min</span></div>
-      <h2>Allow Google Drive (so photos and recordings can be saved)</h2>
+      <div class="eyebrow">Step 1 · part C <span class="time">1 min</span></div>
+      <h2>Switch on the Apps Script API, then allow access</h2>
       <ol class="steps">
-        <li><b class="n">1</b><span>In the Apps Script toolbar there is a dropdown that says <code>myFunction</code> or <code>doPost</code>. Change it to <code>authorizeDrive</code>.</span></li>
-        <li><b class="n">2</b><span>Click <kbd>▶ Run</kbd>.</span></li>
-        <li><b class="n">3</b><span>A window says “Authorization required”: click <kbd>Review permissions</kbd> → choose your account → <kbd>Advanced</kbd> → <kbd>Go to … (unsafe)</kbd> → <kbd>Allow</kbd>. (Google shows “unsafe” for every personal script — it is your own code.)</span></li>
-        <li><b class="n">4</b><span>The log at the bottom shows “Drive authorised” and a link to the new folder <b>GeoSurvey Photos</b> in your Drive.</span></li>
+        <li><b class="n">1</b><span>Open <code>script.google.com/home/usersettings</code> and switch <b>Google Apps Script API</b> to <b>On</b>. (This only lets your own script update itself; it exposes nothing.)</span></li>
+        <li><b class="n">2</b><span>Back in the editor: the dropdown next to <kbd>▶ Run</kbd> says <code>myFunction</code> or <code>doPost</code>. Change it to <code>authorizeDrive</code> and click <kbd>▶ Run</kbd>.</span></li>
+        <li><b class="n">3</b><span>“Authorization required”: <kbd>Review permissions</kbd> → your account → <kbd>Advanced</kbd> → <kbd>Go to … (unsafe)</kbd> → <kbd>Allow</kbd>. (Google says “unsafe” for every personal script — it is your own code.)</span></li>
+        <li><b class="n">4</b><span>The log shows “Drive authorised” with a link to the new Drive folder <b>GeoSurvey Photos</b>, and “Publish: …”.</span></li>
       </ol>
-      <div class="note">Do not skip this. Without it the answers still arrive, but photos and recordings are not stored.</div>
+      <div class="note">Do not skip this. Without it photos and recordings are not stored and the backend cannot update itself.</div>
     </div>
     <div class="mock">
       <div class="bar"><i></i><i></i><i></i><span class="url">script.google.com · Code.gs</span></div>
@@ -227,23 +206,23 @@ var PHOTO_FOLDER = 'GeoSurvey Photos';
         <div class="row"><span class="mb">▶ Run</span><span class="mb">Debug</span><span class="pick click">authorizeDrive ▾</span></div>
         <div class="dialog"><b>Authorization required</b><span style="color:var(--muted)">This project needs your permission to access your data.</span><div class="row"><span class="mb">Cancel</span><span class="mb p">Review permissions</span></div></div>
         <div class="dialog"><b>Google hasn’t verified this app</b><span style="color:var(--muted)">Advanced → Go to GeoSurvey (unsafe)</span><div class="row"><span class="mb p">Allow</span></div></div>
-        <div class="status ok">Execution log: Drive authorised. Folder: drive.google.com/drive/folders/…</div>
+        <div class="status ok">Execution log: Drive authorised. Folder: drive.google.com/… · Publish: {"ok":true,…}</div>
       </div>
     </div>
   </section>
 
-  <!-- 6 -->
+  <!-- 5 -->
   <section class="slide">
     <div>
-      <div class="eyebrow">Step 2 of 4 · part D <span class="time">1 min</span></div>
+      <div class="eyebrow">Step 1 · part D <span class="time">1 min</span></div>
       <h2>Publish the script and copy its address</h2>
       <ol class="steps">
         <li><b class="n">1</b><span>Click <kbd>Deploy</kbd> (top right) → <kbd>New deployment</kbd>.</span></li>
         <li><b class="n">2</b><span>Click the gear icon next to “Select type” and choose <b>Web app</b>.</span></li>
         <li><b class="n">3</b><span>Set <b>Execute as: Me</b> and <b>Who has access: Anyone</b>. Click <kbd>Deploy</kbd>.</span></li>
-        <li><b class="n">4</b><span>Click <kbd>Copy</kbd> under <b>Web app URL</b>. It ends with <code>/exec</code>. Keep it with the AI key.</span></li>
+        <li><b class="n">4</b><span>Click <kbd>Copy</kbd> under <b>Web app URL</b>. It ends with <code>/exec</code>.</span></li>
       </ol>
-      <div class="note">Later, whenever you paste a newer Code.gs: <b>Deploy → Manage deployments → ✎ → Version: New version → Deploy</b>. Otherwise the old code keeps running.</div>
+      <div class="note good">This is the last time you touch Apps Script. New versions install themselves; the URL never changes. Treat the URL like a key — share it only with your team.</div>
     </div>
     <div class="mock">
       <div class="bar"><i></i><i></i><i></i><span class="url">script.google.com · New deployment</span></div>
@@ -262,29 +241,50 @@ var PHOTO_FOLDER = 'GeoSurvey Photos';
     </div>
   </section>
 
+  <!-- 6 -->
+  <section class="slide">
+    <div>
+      <div class="eyebrow">Step 2 <span class="time">seconds per phone</span></div>
+      <h2>Connect the phones</h2>
+      <ol class="steps">
+        <li><b class="n">1</b><span><b>On your own phone or computer:</b> open <code>pulakeshpradhan.github.io/geosurvey</code>, tap <b>⚙️</b>, paste the Web app URL into <b>Database endpoint</b>, tap <kbd>Test database</kbd> → <b>Backend OK</b> → <kbd>Save</kbd>.</span></li>
+        <li><b class="n">2</b><span>Tap the <b>QR icon</b> in the top bar. A code appears.</span></li>
+        <li><b class="n">3</b><span><b>Each enumerator</b> points their phone camera at it and opens the link. Their phone is now connected — nothing to type. (Or <kbd>Copy link</kbd> and send it on WhatsApp.)</span></li>
+        <li><b class="n">4</b><span>On each phone: <b>⚙️</b> → type the <b>Enumerator name</b>, choose the <b>Interview language</b>, <kbd>Save</kbd>. Add the app to the home screen.</span></li>
+      </ol>
+      <div class="note">The QR / link contains the database address. Share it only with your enumerators.</div>
+    </div>
+    <div class="mock">
+      <div class="bar"><i></i><i></i><i></i><span class="url">pulakeshpradhan.github.io/geosurvey · Team link</span></div>
+      <div class="body">
+        <div class="field"><span>Database endpoint</span><div>https://script.google.com/macros/s/AKfy…/exec</div></div>
+        <div class="row"><span class="mb click">Test database</span><span class="status ok">Backend v1.16.0 OK · Drive folder ready</span></div>
+        <div class="dialog" style="align-items:center"><b>Team link</b><span style="color:var(--muted)">Point the phone camera at this code</span><div style="width:120px;height:120px;border:1px solid var(--line);border-radius:8px;background:repeating-conic-gradient(#222 0 25%, #fff 0 50%) 0 0/16px 16px"></div><div class="row"><span class="mb">Copy link</span><span class="mb">Share…</span><span class="mb p">Close</span></div></div>
+      </div>
+    </div>
+  </section>
+
   <!-- 7 -->
   <section class="slide">
     <div>
-      <div class="eyebrow">Step 3 of 4 <span class="time">1 min per phone</span></div>
-      <h2>Put the key and the address into the app</h2>
+      <div class="eyebrow">Step 3 · optional <span class="time">1 min</span></div>
+      <h2>Switch on AI photo-fill for the whole team</h2>
       <ol class="steps">
-        <li><b class="n">1</b><span>Open <code>pulakeshpradhan.github.io/geosurvey</code> on the phone (Chrome or Safari). Tap the <b>⚙️</b> icon at the top right.</span></li>
-        <li><b class="n">2</b><span>Paste the AI key into <b>Gemini API key</b> → tap <kbd>Test connection</kbd> → it must say <b>OK</b>.</span></li>
-        <li><b class="n">3</b><span>Paste the Web app URL into <b>Database endpoint</b> → tap <kbd>Test database</kbd> → it must say <b>Backend OK … Drive folder ready</b>.</span></li>
-        <li><b class="n">4</b><span>Type the <b>Enumerator name</b>, choose the <b>Interview language</b>, tap <kbd>Save</kbd>.</span></li>
+        <li><b class="n">1</b><span>Open <code>aistudio.google.com/app/apikey</code>, sign in, <kbd>Create API key</kbd>, <kbd>Copy</kbd> (starts with <code>AIza</code>). Free.</span></li>
+        <li><b class="n">2</b><span>In Apps Script, Code.gs: find <code>var AI_KEY = '';</code> and paste the key between the quotes. <kbd>Ctrl</kbd>+<kbd>S</kbd>.</span></li>
+        <li><b class="n">3</b><span>In the dropdown next to <kbd>▶ Run</kbd> choose <code>updateBackend</code> → <kbd>▶ Run</kbd>. Done: every connected phone now has <b>Analyze &amp; fill</b> (Google’s Gemma 4), with no key on the phone.</span></li>
       </ol>
-      <div class="note good">Every enumerator does this on their own phone with the <b>same key and same URL</b>. All phones then write into the same Sheet.</div>
+      <div class="note good">Alternative for one phone only: ⚙️ → <b>Gemini API key</b> → <kbd>Test connection</kbd> → <kbd>Save</kbd>. Voice recordings need this option.</div>
     </div>
     <div class="mock">
-      <div class="bar"><i></i><i></i><i></i><span class="url">pulakeshpradhan.github.io/geosurvey · Settings</span></div>
+      <div class="bar"><i></i><i></i><i></i><span class="url">script.google.com · Code.gs</span></div>
       <div class="body">
-        <div class="field"><span>Gemini API key</span><div>AIzaSyD4f…9xQ</div></div>
-        <div class="row"><span class="mb click">Test connection</span><span class="status ok">Gemini gemini-3.5-flash-lite: OK</span></div>
-        <div class="field"><span>Database endpoint</span><div>https://script.google.com/macros/s/AKfy…/exec</div></div>
-        <div class="row"><span class="mb click">Test database</span><span class="status ok">Backend v1.14.1 OK · Drive folder ready</span></div>
-        <div class="field"><span>Enumerator name</span><div>Rina Sardar</div></div>
-        <div class="field"><span>Interview language</span><div>বাংলা · Bengali</div></div>
-        <div class="row"><span class="mb">Cancel</span><span class="mb p">Save</span></div>
+        <div class="code">var BACKEND_VERSION = '1.16.0';
+var AI_KEY = '<span class="h">AIzaSyD4f…9xQ</span>';   // team AI key
+var ADMIN_TOKEN = 'GeoSurvey';
+…</div>
+        <div class="row"><span class="mb">▶ Run</span><span class="pick click">updateBackend ▾</span></div>
+        <div class="status ok">Execution log: {"ok":true,"updated":false,"version":"1.16.0","deployments":1}</div>
       </div>
     </div>
   </section>
@@ -292,15 +292,16 @@ var PHOTO_FOLDER = 'GeoSurvey Photos';
   <!-- 8 -->
   <section class="slide">
     <div>
-      <div class="eyebrow">Step 4 of 4 <span class="time">1 min</span></div>
+      <div class="eyebrow">Step 4 <span class="time">1 min</span></div>
       <h2>Choose the questionnaire</h2>
-      <p>The first time, the app asks how to start. Pick one:</p>
+      <p>The first time, the app asks how to start. Pick one (needs the team key once a database is connected):</p>
       <ol class="steps">
         <li><b class="n">A</b><span><b>Use sample questionnaire</b> — a complete household survey. Fastest way to begin.</span></li>
         <li><b class="n">B</b><span><b>Design your own</b> — add sections and questions like Google Forms.</span></li>
         <li><b class="n">C</b><span><b>Upload paper questionnaire</b> — PDF or photos of your printed form; it is converted exactly as printed. Then <kbd>Improve with AI</kbd> if you want.</span></li>
+        <li><b class="n">D</b><span><b>Open a project file</b> — a <code>.geosurvey</code> file installs the questionnaire <i>and</i> connects the phone to the database. Every Publish saves one to the Drive folder automatically.</span></li>
       </ol>
-      <p style="margin-top:12px">Change it any time with the <b>Edit</b> button. <kbd>Apply</kbd> = this phone. <kbd>Publish to team</kbd> = every phone gets it (asks for your password from Step 2).</p>
+      <p style="margin-top:12px">Change it any time with the <b>Edit</b> button (team key). <kbd>Apply</kbd> = this phone. <kbd>Publish to team</kbd> = every phone gets it.</p>
     </div>
     <div class="mock">
       <div class="bar"><i></i><i></i><i></i><span class="url">GeoSurvey · Survey</span></div>
@@ -321,16 +322,16 @@ var PHOTO_FOLDER = 'GeoSurvey Photos';
       <div class="eyebrow">In the field</div>
       <h2>One household in five steps</h2>
       <ol class="steps">
-        <li><b class="n">1</b><span><b>Location fills itself.</b> Wait until it shows e.g. <code>±8 m</code>. Nothing to press.</span></li>
-        <li><b class="n">2</b><span><kbd>Capture photo</kbd> the house, kitchen, water source, ID or paper form — and/or <kbd>Record</kbd> the interview in any language.</span></li>
+        <li><b class="n">1</b><span><b>Location fills itself.</b> Wait until it shows e.g. <code>±8 m</code>. Village, block and PIN come from the map — correct them if wrong.</span></li>
+        <li><b class="n">2</b><span><kbd>Capture photo</kbd> the house, kitchen, water source, ID or paper form; <kbd>Record</kbd> the interview in any language; or tap <b>✎</b> to type notes.</span></li>
         <li><b class="n">3</b><span><kbd>Analyze &amp; fill</kbd> — the AI fills the answers in English. Answers in <span class="yel" style="background:#fff3c4;color:#0b0e13;padding:1px 6px;border-radius:5px;border:1px solid #e6b800">yellow</span> are AI-filled: check and correct.</span></li>
         <li><b class="n">4</b><span>Each section has its own 📷 ✨ 🎙 buttons. Recording with a section mic fills that section as soon as you stop.</span></li>
-        <li><b class="n">5</b><span><kbd>Submit</kbd>. Saved on the phone, sent to the Sheet; no internet → sent later by itself. <kbd>PDF</kbd> prints an A4 copy.</span></li>
+        <li><b class="n">5</b><span><kbd>Submit</kbd>. Sent to the Sheet; no internet → sent later by itself. <kbd>PDF</kbd> prints an A4 copy.</span></li>
       </ol>
     </div>
     <div class="phone"><div class="screen">
-      <div class="card"><b>Photos &amp; auto-fill</b><div class="row"><span class="mb">📷 Capture photo</span><span class="mb">🎙 Record</span></div><span class="mb p" style="text-align:center">Analyze &amp; fill</span></div>
-      <div class="card"><b>01 · Location</b><span class="status ok">Bowbazar, Kolkata, 700073 · ±8 m</span></div>
+      <div class="card"><b>Photos &amp; auto-fill</b><div class="row"><span class="mb">📷 Capture photo</span><span class="mb">🎙 Record</span><span class="mb">✎</span></div><span class="mb p" style="text-align:center">Analyze &amp; fill</span></div>
+      <div class="card"><b>01 · Location</b><span class="status ok">Baidyapur, Kalna II, Purba Bardhaman, 713122 · ±8 m</span></div>
       <div class="card"><b>02 · Household head</b><span>Name<br><span class="yel">Sita Mondal</span></span><span>Age<br><span class="yel">42</span></span></div>
       <span class="mb p" style="text-align:center">Submit</span>
     </div></div>
@@ -342,12 +343,12 @@ var PHOTO_FOLDER = 'GeoSurvey Photos';
       <div class="eyebrow">Where everything is saved</div>
       <h2>Your data stays in your Google account</h2>
       <div class="flow">
-        <div class="box">Phone<small>Records tab keeps a copy of answers, photos, recordings until you remove them</small></div><div class="arr">→</div>
+        <div class="box">Phone<small>only a queue: records wait here until sent, then the copy is removed</small></div><div class="arr">→</div>
         <div class="box">Google Sheet<small>one row per household, tab “Responses”</small></div><div class="arr">+</div>
-        <div class="box">Drive folder “GeoSurvey Photos”<small>photos, recordings (.webm), transcripts (.txt); links in the Sheet</small></div>
+        <div class="box">Drive folder “GeoSurvey Photos”<small>photos, recordings, transcripts; links in the Sheet</small></div>
       </div>
-      <p style="margin-top:18px">In the app: <b>Records</b> → column <b>Files in Drive</b> shows a green “in Drive” with links, or a red “not in Drive” with an <kbd>Upload files</kbd> button that re-sends them. <b>Settings → Test database</b> always shows a direct link to the folder.</p>
-      <p><b>Downloads:</b> Records → CSV, JSON, SPSS (.sav), KMZ (Google Earth). <b>Analysis</b> tab → automatic statistics and a plain-language report. <b>Edit → Collected data</b> (your password) → all households from all phones.</p>
+      <p style="margin-top:18px"><b>Records</b> tab: <kbd>Sync</kbd> sends what is waiting and shows <i>your</i> records straight from the database. <kbd>Sync all</kbd> shows <i>everyone’s</i> — it asks for the team key once. Rows marked <b>database</b> come from other phones. <b>Files in Drive</b> shows links, or <kbd>Upload files</kbd> if a photo did not arrive. The Drive folder also holds <code>Rows marked <b>database</b> come from other phones. <b>Files in Drive</b> shows links, or <kbd>Upload files</kbd> if a photo did not arrive.</p>lt;titleRows marked <b>database</b> come from other phones. <b>Files in Drive</b> shows links, or <kbd>Upload files</kbd> if a photo did not arrive.</p>gt;.geosurvey</code>, a project file that restores the questionnaire and connection on any phone.</p>
+      <p><b>Downloads:</b> Records → CSV, JSON, SPSS (.sav), KMZ (Google Earth). <b>Analysis</b> tab → automatic statistics and a plain-language report. <b>Edit → Collected data</b> (team key) → delete a wrong entry.</p>
     </div>
   </section>
 
@@ -358,9 +359,10 @@ var PHOTO_FOLDER = 'GeoSurvey Photos';
       <h2>Quick fixes</h2>
       <table>
         <tr><th>You see</th><th>Do this</th></tr>
-        <tr><td>“AI error” on Analyze &amp; fill</td><td>Settings → <b>Test connection</b>. If it fails, create a new key in AI Studio and paste it again.</td></tr>
-        <tr><td>Test database: “old Code.gs”</td><td>Paste the latest Code.gs, then <b>Deploy → Manage deployments → ✎ → New version → Deploy</b>.</td></tr>
-        <tr><td>“permission to call DriveApp”</td><td>Step 2C was skipped: run <b>authorizeDrive</b>, click Allow, deploy a new version, then Records → <b>Upload files</b>.</td></tr>
+        <tr><td>“Backend is older than the app”</td><td>Settings → <b>Test database</b> updates it. “Apps Script API is off” → step 1C.1. “Not authorised” → steps 1B.2 and 1C.2. A backend older than v1.15.4 needs Code.gs pasted once more (steps 1B–1D).</td></tr>
+        <tr><td>“AI error” / “backend has no AI key”</td><td>Step 3: paste the key into <code>AI_KEY</code> and run <b>updateBackend</b>. Per-phone key: Settings → <b>Test connection</b>.</td></tr>
+        <tr><td>“permission to call DriveApp”</td><td>Step 1C was skipped: run <b>authorizeDrive</b> and Allow, then Records → <b>Upload files</b>.</td></tr>
+        <tr><td>“Team key not accepted”</td><td>It must match <code>ADMIN_TOKEN</code> in Code.gs exactly (capital letters matter).</td></tr>
         <tr><td>“Locating…” never finishes</td><td>Allow location when the phone asks; move near a window or outside; tap <b>⟳ Refresh</b>.</td></tr>
         <tr><td>Camera or microphone does not open</td><td>Allow camera and microphone for the site in the phone’s browser settings.</td></tr>
         <tr><td>App looks old after an update</td><td>Close it completely and open again.</td></tr>
@@ -374,11 +376,11 @@ var PHOTO_FOLDER = 'GeoSurvey Photos';
       <div class="eyebrow">Before the first day of fieldwork</div>
       <h2>Checklist</h2>
       <div class="check">
-        <label><input type="checkbox" id="c1"> AI key created and saved</label>
-        <label><input type="checkbox" id="c2"> Google Sheet created, Code.gs pasted, password set</label>
-        <label><input type="checkbox" id="c3"> authorizeDrive run and allowed (folder exists in Drive)</label>
-        <label><input type="checkbox" id="c4"> Deployed as Web app (Anyone), URL copied</label>
-        <label><input type="checkbox" id="c5"> Every phone: key + URL entered, both tests OK, name and language set</label>
+        <label><input type="checkbox" id="c1"> Google Sheet created; Code.gs and appsscript.json pasted; team key changed</label>
+        <label><input type="checkbox" id="c2"> Apps Script API switched on; authorizeDrive run and allowed (folder exists in Drive)</label>
+        <label><input type="checkbox" id="c3"> Deployed as Web app (Anyone); URL entered in Settings; Test database OK</label>
+        <label><input type="checkbox" id="c4"> Every phone connected via the QR code; name and language set</label>
+        <label><input type="checkbox" id="c5"> AI key in AI_KEY and updateBackend run (or a key per phone)</label>
         <label><input type="checkbox" id="c6"> Questionnaire chosen; if edited, Published to team</label>
         <label><input type="checkbox" id="c7"> One test household submitted; row visible in the Sheet, files in Drive</label>
         <label><input type="checkbox" id="c8"> Test record deleted from Edit → Collected data</label>
@@ -395,14 +397,17 @@ var PHOTO_FOLDER = 'GeoSurvey Photos';
       <table>
         <tr><th>What</th><th>Where</th></tr>
         <tr><td>The app</td><td><code>https://pulakeshpradhan.github.io/geosurvey/</code></td></tr>
-        <tr><td>Free AI key</td><td><code>https://aistudio.google.com/app/apikey</code></td></tr>
         <tr><td>New Google Sheet</td><td><code>https://sheets.new</code></td></tr>
         <tr><td>Backend code to paste</td><td><code>https://github.com/pulakeshpradhan/geosurvey/blob/main/backend/Code.gs</code></td></tr>
+        <tr><td>Manifest to paste</td><td><code>https://github.com/pulakeshpradhan/geosurvey/blob/main/backend/appsscript.json</code></td></tr>
+        <tr><td>Apps Script API switch</td><td><code>https://script.google.com/home/usersettings</code></td></tr>
+        <tr><td>Free AI key (optional)</td><td><code>https://aistudio.google.com/app/apikey</code></td></tr>
         <tr><td>Written guide</td><td><code>https://github.com/pulakeshpradhan/geosurvey#readme</code></td></tr>
       </table>
-      <p style="margin-top:16px"><b>Print all slides</b> (top right) gives a one-page-per-step handout for enumerators.</p>
+      <p style="margin-top:16px"><b>Print all slides</b> (top right) gives a one-page-per-step handout. Created by <a href="https://pulakeshpradhan.github.io/" target="_blank" rel="noopener">Pulakesh Pradhan</a>.</p>
     </div>
   </section>
+
 
   <nav class="bottom">
     <button class="btn" id="prevBtn" type="button">‹ Previous</button>

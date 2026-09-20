@@ -4,6 +4,7 @@
  * Approve & apply (device) / Approve & publish (team via backend).
  * Depends on app.js globals: LOCATION_FIELDS, DEFAULT_SCHEMA, FIELD_TYPES, LIKERT, applySchema, currentSchema, deriveConstructs,
  * deriveModel, clone, LS, settings, activeEngine, engineReady, openSettings, geminiCall, gemmaCall, GEMINI_FALLBACK, GEMMA_FATAL, NO_ENGINE_MSG, extractJson,
+ * askTeamKey, backupProject, downloadProject, parseProjectFile,
  * compressImage, canvasToDataUrl, adminToken, publishSchema, download, toast, setStatus, esc, $, $$. */
 'use strict';
 
@@ -225,13 +226,15 @@ const Designer = (() => {
     toast('Questionnaire approved — survey, AI, exports, PDF and analysis now use it', 'ok');
     if (publish) {
       if (!settings.endpoint) return toast('Set a database endpoint in Settings to publish to the team', 'err');
-      if (!adminToken()) { const t = prompt('Admin token (from the Apps Script backend) to publish this questionnaire to all devices:'); if (!t) return; sessionStorage.setItem('gs_admin', t.trim()); }
-      try { await publishSchema(d); toast('Published — every device adopts this questionnaire on its next start', 'ok'); }
+      if (!adminToken() && !askTeamKey('Publishing the questionnaire to every phone needs it')) return;
+      try { const r = await publishSchema(d); toast('Published — every device adopts this questionnaire on its next start' + (r.projectUrl && !/^ERROR/.test(r.projectUrl) ? ' · project file saved to Drive' : ''), 'ok'); }
       catch (e) { toast('Publish failed: ' + e.message, 'err'); }
+    } else {
+      const r = await backupProject(d); if (r && r.projectUrl && !/^ERROR/.test(r.projectUrl)) toast('Project file backed up to the Drive folder', 'ok');
     }
   }
-  function exportJson() { download(`geosurvey_questionnaire_${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(normalise(clone(draft)), null, 2), 'application/json'); }
-  async function importJson(file) { try { const d = JSON.parse(await file.text()); if (!Array.isArray(d.sections)) throw new Error('not a questionnaire file'); draft = { ...draft, ...d, remarks: d.remarks || clone(DEFAULT_SCHEMA.remarks) }; active = null; persist(); render(); toast('Questionnaire loaded into the draft — review and approve'); } catch (e) { toast('Import failed: ' + e.message, 'err'); } }
+  function exportJson() { downloadProject(normalise(clone(draft))); }
+  async function importJson(file) { try { const { schema } = await parseProjectFile(file); draft = { ...draft, ...schema, remarks: schema.remarks || clone(DEFAULT_SCHEMA.remarks) }; active = null; persist(); render(); toast('Questionnaire loaded into the draft — review and approve'); } catch (e) { toast('Import failed: ' + e.message, 'err'); } }
 
   /* ---------- document intake: PDF / images → page images ---------- */
   function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load PDF renderer (offline?)')); document.head.appendChild(s); }); }

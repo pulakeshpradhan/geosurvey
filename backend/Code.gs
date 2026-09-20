@@ -31,7 +31,7 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.15.8';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.16.0';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -296,6 +296,21 @@ function doGet(e) {
 }
 
 function folderUrlSafe_() { try { return folder_().getUrl(); } catch (e) { return ''; } }
+/** Write <title>.geosurvey (questionnaire + team connection) into the Drive folder, plus a dated copy under "Questionnaire history". */
+function saveProject_(data) {
+  var schema = data.schema, url = String(data.endpoint || '') || (ScriptApp.getService() && ScriptApp.getService().getUrl()) || '';
+  var appUrl = String(data.appUrl || '');
+  var p = { format: 'geosurvey-project', version: 1, backend: BACKEND_VERSION, saved_at: new Date().toISOString(), title: schema.title || 'GeoSurvey',
+    endpoint: url, teamLink: appUrl && url ? appUrl + '?db=' + encodeURIComponent(url) : '', schema: schema };
+  var base = String(p.title).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'GeoSurvey';
+  var content = JSON.stringify(p, null, 2), folder = folder_();
+  var it = folder.getFilesByName(base + '.geosurvey'), file = it.hasNext() ? it.next() : null;
+  if (file) file.setContent(content); else file = folder.createFile(base + '.geosurvey', content, 'application/json');
+  var hi = folder.getFoldersByName('Questionnaire history'), hist = hi.hasNext() ? hi.next() : folder.createFolder('Questionnaire history');
+  hist.createFile(base + '_' + p.saved_at.replace(/[:.]/g, '-') + '.geosurvey', content, 'application/json');
+  return 'https://drive.google.com/file/d/' + file.getId() + '/view';
+}
+function saveProjectSafe_(data) { try { return saveProject_(data); } catch (e) { return 'ERROR: ' + e; } }
 /** Reverse geocoding with Google's geocoder (Apps Script Maps service, no API key): village / block / district / PIN. */
 function geocode_(lat, lon) {
   if (!isFinite(lat) || !isFinite(lon)) return { ok: false, error: 'lat and lon are required', version: BACKEND_VERSION };
@@ -351,7 +366,11 @@ function adminAction_(data) {
   if (data.action === 'setSchema') {
     if (!data.schema || !data.schema.sections) return json_({ ok: false, error: 'No schema' });
     setConfig_('schema', JSON.stringify(data.schema));
-    return json_({ ok: true, version: data.schema.version });
+    return json_({ ok: true, version: data.schema.version, projectUrl: saveProjectSafe_(data) });
+  }
+  if (data.action === 'saveProject') { // Drive backup of a questionnaire that was only applied locally
+    if (!data.schema || !data.schema.sections) return json_({ ok: false, error: 'No schema' });
+    return json_({ ok: true, projectUrl: saveProjectSafe_(data) });
   }
   return json_({ ok: false, error: 'Unknown action' });
 }
