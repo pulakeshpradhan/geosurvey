@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.5';
+const APP_VERSION = '1.15.6';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1172,11 +1172,30 @@ async function pruneSynced() {
 let dbRows = [], dbRowsAt = 0, dbScope = 'mine';
 const DB_CACHE_KEY = '__team_rows';
 /** Ask for the team key once and keep it in Settings. Returns false when the user cancels. */
-function askTeamKey() {
-  const k = prompt('Team key (set as ADMIN_TOKEN in the Apps Script; the default is "GeoSurvey"). It unlocks the records of the whole team on this phone:', settings.adminKey || '');
+function askTeamKey(why = 'It unlocks the records of the whole team on this phone') {
+  const k = prompt(`Team key (set as ADMIN_TOKEN in the Apps Script; the default is "GeoSurvey"). ${why}:`, settings.adminKey || '');
   if (k === null) return false;
-  settings.adminKey = k.trim(); LS.set('gs_settings', settings);
-  return !!settings.adminKey;
+  const key = k.trim();
+  if (key !== settings.adminKey) { settings.adminKey = key; settings.adminKeyOk = false; LS.set('gs_settings', settings); }
+  return !!key;
+}
+/** Confirm the stored key with the backend (cheap list call). Remembers a success so later checks work offline. */
+async function verifyTeamKey() {
+  if (settings.adminKeyOk) return true;
+  if (!navigator.onLine) { toast('Go online once so the team key can be checked', 'err'); return false; }
+  const q = new URLSearchParams({ action: 'list', limit: 1, token: adminToken() });
+  const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q).catch(() => null);
+  const j = r ? await r.json().catch(() => ({})) : {};
+  if (j.ok) { settings.adminKeyOk = true; LS.set('gs_settings', settings); return true; }
+  if (j.error === 'Invalid admin token') { settings.adminKey = ''; settings.adminKeyOk = false; LS.set('gs_settings', settings); sessionStorage.removeItem('gs_admin'); toast('Team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)', 'err'); }
+  else toast('Could not check the team key: ' + (j.error || 'no answer from the backend'), 'err');
+  return false;
+}
+/** Editing the questionnaire is reserved for whoever holds the team key, as soon as a database is connected. */
+async function requireAdmin(why) {
+  if (!settings.endpoint) return true; // device-only use: nothing shared to protect
+  if (!adminToken() && !askTeamKey(why)) return false;
+  return verifyTeamKey();
 }
 async function loadDbCache() {
   try { const c = await PhotoDB.getKV(DB_CACHE_KEY); if (c && c.endpoint === settings.endpoint) { dbRows = c.rows || []; dbRowsAt = c.at || 0; dbScope = c.scope || 'all'; } } catch {}
@@ -1188,11 +1207,12 @@ async function refreshDbRows() {
   const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q);
   const j = await r.json().catch(() => ({}));
   if (!j.ok) {
-    if (j.error === 'Invalid admin token') { settings.adminKey = ''; LS.set('gs_settings', settings); sessionStorage.removeItem('gs_admin'); throw new Error('team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)'); }
+    if (j.error === 'Invalid admin token') { settings.adminKey = ''; settings.adminKeyOk = false; LS.set('gs_settings', settings); sessionStorage.removeItem('gs_admin'); throw new Error('team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)'); }
     if (!j.version) throw new Error('Backend is older than this app — ' + PASTE_ONCE);
     throw new Error(j.error || `HTTP ${r.status}`);
   }
   dbRows = j.rows || []; dbRowsAt = Date.now(); dbScope = scope;
+  if (scope === 'all' && !settings.adminKeyOk) { settings.adminKeyOk = true; LS.set('gs_settings', settings); }
   PhotoDB.putKV(DB_CACHE_KEY, { rows: dbRows, at: dbRowsAt, scope, endpoint: settings.endpoint }).catch(() => {});
   if (typeof Analysis !== 'undefined') Analysis.schedule();
   return dbRows.length;
@@ -1345,6 +1365,7 @@ function saveSettings(quiet = false) {
   };
   // What we know about the backend only holds while the endpoint is unchanged
   if (settings.endpoint === prev.endpoint) { settings.backendAI = prev.backendAI; settings.backendVersion = prev.backendVersion; }
+  settings.deviceId = prev.deviceId; settings.adminKeyOk = settings.endpoint === prev.endpoint && settings.adminKey === prev.adminKey ? prev.adminKeyOk : false;
   if (quiet) return; // dry run for the connection test
   LS.set('gs_settings', settings);
   if (!getValue('surveyor') && settings.surveyor) setValue('surveyor', settings.surveyor);
@@ -1377,10 +1398,11 @@ function init() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#formView').hidden && (!lastFix || Date.now() - lastFix.time > 300000)) autoLocate(); });
 
   $$('.tab').forEach(t => t.onclick = () => showView(t.dataset.view));
-  $('#editBtn').onclick = () => showView('editView');
-  $('#obDesign').onclick = () => { showView('editView'); if (typeof Designer !== 'undefined') Designer.startBlank(); };
-  $('#obSample').onclick = useSampleQuestionnaire;
-  $('#obUpload').onclick = () => { showView('editView'); $('#designerFile').click(); };
+  const EDIT_WHY = 'Only the admin edits the questionnaire';
+  $('#editBtn').onclick = async () => { if (await requireAdmin(EDIT_WHY)) showView('editView'); };
+  $('#obDesign').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); if (typeof Designer !== 'undefined') Designer.startBlank(); };
+  $('#obSample').onclick = async () => { if (await requireAdmin(EDIT_WHY)) useSampleQuestionnaire(); };
+  $('#obUpload').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); $('#designerFile').click(); };
   probeBackend();
   $('#settingsBtn').onclick = openSettings;
   $('#setModel').onchange = e => { $('#setModelCustom').hidden = e.target.value !== 'custom'; };

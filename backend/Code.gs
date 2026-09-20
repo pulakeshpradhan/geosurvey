@@ -5,7 +5,7 @@
  *  1. Create a new Google Sheet (sheets.new).
  *  2. Extensions → Apps Script. Delete the default code, paste this file.
  *     Project Settings (gear) → tick "Show appsscript.json manifest file" → open appsscript.json → paste backend/appsscript.json.
- *  3. Optionally change ADMIN_TOKEN below (the team key; default 'GeoSurvey'). Save.
+ *  3. Optionally change ADMIN_TOKEN below (the team key; default 'GeoSurvey') — or set a Script Property ADMIN_TOKEN. Save.
  *  4. Enable the Apps Script API once for your account: https://script.google.com/home/usersettings → "Google Apps Script API" ON.
  *  5. Run the function "authorizeDrive" once (▶ Run) and allow access (Sheets, Drive, Apps Script projects).
  *  6. Deploy → New deployment → Type: "Web app"
@@ -31,7 +31,7 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.15.5';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.15.6';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -156,7 +156,9 @@ function getSheet_() {
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
-function isAdmin_(token) { return !!ADMIN_TOKEN && String(token || '') === ADMIN_TOKEN; }
+/** Team key: a Script Property named ADMIN_TOKEN (Project Settings) overrides the constant above. */
+function adminToken_() { var k = ADMIN_TOKEN; try { k = PropertiesService.getScriptProperties().getProperty('ADMIN_TOKEN') || k; } catch (e) {} return String(k || '').trim(); }
+function isAdmin_(token) { var k = adminToken_(); return !!k && String(token || '') === k; }
 function headers_(sh) {
   var lastCol = Math.max(sh.getLastColumn(), 1);
   return sh.getRange(1, 1, 1, lastCol).getValues()[0].filter(String);
