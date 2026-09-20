@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.16.4';
+const APP_VERSION = '1.17.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -199,8 +199,11 @@ function deriveModel(constructs, stored) {
 const EMPTY_SCHEMA = { version: 0, title: '', description: '', sections: [], remarks: clone(REMARKS_FIELDS), constructNames: {}, model: null };
 let formListenersBound = false;
 /** Install a questionnaire schema (default or designed in the Edit tab) and re-render the form. */
+/** Identity of the installed questionnaire on the backend: its id and dedicated response tab (empty for device-only use). */
+let SCHEMA_META = { qid: '', sheet: '' };
 function applySchema(schema, rerender = true) {
   const s = schema || DEFAULT_SCHEMA;
+  SCHEMA_META = { qid: s.qid || '', sheet: s.sheet || '' };
   FORM_META = { title: s.title || 'Socio-Economic Household Survey', description: s.description || '' };
   SECTIONS = clone(s.sections);
   REMARKS_FIELDS = clone(s.remarks || DEFAULT_SCHEMA.remarks);
@@ -219,7 +222,9 @@ function applySchema(schema, rerender = true) {
   }
 }
 let FORM_META = { title: 'Socio-Economic Household Survey', description: '' };
-function currentSchema() { return { version: (LS.get('gs_schema', null) || {}).version || 1, title: FORM_META.title, description: FORM_META.description, sections: clone(SECTIONS), remarks: clone(REMARKS_FIELDS), constructNames: Object.fromEntries(Object.entries(CONSTRUCTS).map(([k, c]) => [k, c.name])), model: clone(STRUCTURAL_MODEL) }; }
+function currentSchema() { return { version: (LS.get('gs_schema', null) || {}).version || 1, qid: SCHEMA_META.qid || undefined, sheet: SCHEMA_META.sheet || undefined, title: FORM_META.title, description: FORM_META.description, sections: clone(SECTIONS), remarks: clone(REMARKS_FIELDS), constructNames: Object.fromEntries(Object.entries(CONSTRUCTS).map(([k, c]) => [k, c.name])), model: clone(STRUCTURAL_MODEL) }; }
+/** Install a questionnaire received from the backend (or a project file) as this phone's form. */
+function adoptSchema(s, why = '') { const prev = SCHEMA_META.qid; LS.set('gs_schema', s); applySchema(s); if ((s.qid || '') !== (prev || '')) resetDbCache(); if (why) toast(why, 'ok'); }
 applySchema(LS.get('gs_schema', null) || EMPTY_SCHEMA, false);
 /** Install the built-in sample questionnaire (18 Likert items, 5 constructs, structural model). */
 function useSampleQuestionnaire() { const d = clone(DEFAULT_SCHEMA); d.version = Date.now(); LS.set('gs_schema', d); applySchema(d); toast('Sample questionnaire installed — customise it any time in Edit', 'ok'); autoLocate(); }
@@ -280,7 +285,8 @@ async function openProjectFile(file) {
     if (endpoint && setEndpoint(endpoint, 'link')) parts.push('connected to the team database');
     if (recLang) { settings.recLang = recLang; LS.set('gs_settings', settings); }
     const s = { ...schema, version: schema.version || Date.now() };
-    LS.set('gs_schema', s); applySchema(s);
+    adoptSchema(s);
+    if (endpoint) { settings.pinnedQid = s.qid || ''; LS.set('gs_settings', settings); } // the file names the questionnaire this phone should use
     toast('Project opened — ' + parts.join(', '), 'ok');
     updateEngineChip(); probeBackend(); autoLocate();
   } catch (e) { toast('Could not open the file: ' + e.message, 'err'); }
@@ -1098,7 +1104,7 @@ async function submitForm() {
   const btn = $('#submitBtn'); btn.disabled = true;
   try {
     const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2);
-    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', app_version: APP_VERSION, device_id: settings.deviceId, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
+    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', app_version: APP_VERSION, device_id: settings.deviceId, qid: SCHEMA_META.qid || undefined, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
     if (photos.length || audioClips.length) {
       if (photos.length) { try { rec.photo_thumb = await makeThumb(photos[0].dataUrl); } catch {} }
       await PhotoDB.put(id, photos.map(p => ({ name: p.name, section: p.section, dataUrl: p.dataUrl, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc })), audioClips.map((c, i) => ({ name: `audio_${i + 1}${c.section ? '_' + c.section : ''}.${c.mime.includes('mp4') ? 'm4a' : c.mime.includes('ogg') ? 'ogg' : 'webm'}`, ...c })));
@@ -1115,8 +1121,13 @@ function noteBackend(j) {
   if (!j) return;
   if (j.folderUrl) settings.folderUrl = j.folderUrl;
   if (j.version) settings.backendVersion = j.version;
+  if (j.sheet) settings.backendSheet = j.sheet;
+  if (typeof j.active === 'string') settings.activeQid = j.active;
+  if (Array.isArray(j.questionnaires)) settings.questionnaires = j.questionnaires;
+  if (typeof j.rows === 'number') settings.backendRows = j.rows;
+  if (Array.isArray(j.sheets)) settings.backendSheets = j.sheets;
   if (typeof j.ai === 'boolean' && j.ai !== settings.backendAI) { settings.backendAI = j.ai; updateEngineChip(); }
-  if (j.folderUrl || typeof j.ai === 'boolean') LS.set('gs_settings', settings);
+  if (j.folderUrl || j.sheet || typeof j.ai === 'boolean') LS.set('gs_settings', settings);
 }
 /* ---- Backend self-update: the Apps Script fetches the latest Code.gs from GitHub and re-points its own deployment ---- */
 const newerVersion = (a, b) => { const x = String(a).split('.'), y = String(b).split('.'); for (let i = 0; i < 3; i++) { const p = +x[i] || 0, q = +y[i] || 0; if (p !== q) return p > q; } return false; };
@@ -1157,15 +1168,23 @@ async function testDatabase() {
   const ai = j.ai ? ` · Gemma 4 enabled for the team (${j.aiModel})` : typeof j.ai === 'boolean' ? ' · Gemma 4 off (no AI_KEY in Code.gs)' : '';
   return `Backend v${j.version} OK · ${j.rows} rows in the sheet · Drive folder "${j.folderName}" ready${ai}${upd}`;
 }
-/** Adopt a newer team questionnaire, learn whether the backend serves Gemma 4, and trigger a self-update if it is behind. */
+/** Adopt the team questionnaire (the default one, or the one this phone was pinned to), learn whether the backend serves
+ *  Gemma 4, and trigger a self-update if it is behind. */
 function probeBackend() {
   if (!settings.endpoint || !navigator.onLine) return;
-  fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=schema').then(r => r.json()).then(j => {
+  const pinned = settings.pinnedQid || '';
+  const url = settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=schema' + (pinned ? '&q=' + encodeURIComponent(pinned) : '');
+  fetch(url).then(r => r.json()).then(j => {
     if (!j.ok) return;
     const wasReady = engineReady();
     noteBackend(j);
     if (!wasReady && engineReady()) toast('Photo auto-fill is ready — Gemma 4 through the team backend', 'ok');
-    if (j.schema && j.schema.version > (LS.get('gs_schema', { version: 0 }).version || 0)) { LS.set('gs_schema', j.schema); applySchema(j.schema); toast('Questionnaire updated to the team version', 'ok'); }
+    const local = LS.get('gs_schema', null) || { version: 0 };
+    if (pinned && !j.schema) { settings.pinnedQid = ''; LS.set('gs_settings', settings); return probeBackend(); } // pinned questionnaire was deleted → follow the default
+    if (j.schema) {
+      const switched = (j.schema.qid || '') !== (local.qid || '');
+      if (switched || j.schema.version > (local.version || 0)) adoptSchema(j.schema, switched && local.sections?.length ? `Questionnaire changed to "${j.schema.title || 'untitled'}" (team default)` : 'Questionnaire updated to the team version');
+    }
     autoUpdateBackend(j.version || '1.14.1'); // schema responses before v1.15.0 carry no version
   }).catch(() => {});
 }
@@ -1285,6 +1304,7 @@ async function refreshDbRows() {
   if (!settings.endpoint) throw new Error('No database endpoint configured (Settings)');
   const scope = adminToken() ? 'all' : 'mine';
   const q = new URLSearchParams({ action: 'list', limit: 5000 }); if (scope === 'all') q.set('token', adminToken()); else q.set('device', settings.deviceId);
+  if (SCHEMA_META.qid) q.set('q', SCHEMA_META.qid); // this phone's questionnaire has its own response tab
   const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q);
   const j = await r.json().catch(() => ({}));
   if (!j.ok) {
@@ -1313,7 +1333,7 @@ function renderLocalTable() {
   const parts = [];
   if (waiting) parts.push(`${waiting} waiting on this phone to be sent`);
   if (kept) parts.push(`${kept} sent but files not yet in Drive (kept on the phone until "Upload files" succeeds)`);
-  if (dbRowsAt) parts.push(`${dbRows.length} ${dbScope === 'all' ? 'record(s) of the whole team' : 'of your record(s)'} in the database, as of ${fmtDate(new Date(dbRowsAt).toISOString())}${dbScope === 'mine' ? ' — Sync all shows everyone\'s with the team key' : ''}`);
+  if (dbRowsAt) parts.push(`${dbRows.length} ${dbScope === 'all' ? 'record(s) of the whole team' : 'of your record(s)'} in the database${settings.backendSheet ? ` (sheet "${settings.backendSheet}")` : ''}, as of ${fmtDate(new Date(dbRowsAt).toISOString())}${dbScope === 'mine' ? ' — Sync all shows everyone\'s with the team key' : ''}`);
   else if (settings.endpoint) parts.push('press Sync to read your records from the database' + (adminToken() ? '' : '; Sync all shows the whole team\'s with the team key'));
   $('#localSummary').textContent = parts.length ? parts.join(' · ') + '.' : 'No submissions on this device yet.';
   const link = $('#driveFolderLink'); if (link) { link.hidden = !settings.folderUrl; link.href = settings.folderUrl || '#'; }
@@ -1367,8 +1387,38 @@ async function adminPost(payload) {
   return j;
 }
 const appUrl = () => location.origin + location.pathname;
-/** Publish to every phone; the backend also writes <title>.geosurvey into the Drive folder. */
-async function publishSchema(schema) { return adminPost({ action: 'setSchema', schema, appUrl: appUrl(), endpoint: settings.endpoint }); }
+/** Publish a questionnaire: update an existing one (opts.qid) or create a new one with its own response tab (no qid).
+ *  opts: { qid, sheetMode, sheetName, setActive }. The backend also writes <title>.geosurvey into the Drive folder. */
+async function publishSchema(schema, opts = {}) {
+  const r = await adminPost({ action: 'setSchema', schema, qid: opts.qid || '', setActive: !!opts.setActive, appUrl: appUrl(), endpoint: settings.endpoint, sheetMode: opts.sheetMode || 'current', sheetName: opts.sheetName || '' });
+  noteBackend(r);
+  if (r.qid) { schema.qid = r.qid; schema.sheet = r.sheet; }
+  if (r.sheet !== SCHEMA_META.sheet) resetDbCache();
+  return r;
+}
+function resetDbCache() { dbRows = []; dbRowsAt = 0; dbScope = 'mine'; PhotoDB.putKV(DB_CACHE_KEY, { rows: [], at: 0, scope: 'mine', endpoint: settings.endpoint }).catch(() => {}); }
+async function setDefaultQuestionnaire(qid) { const r = await adminPost({ action: 'setActive', qid }); noteBackend(r); return r; }
+async function deleteQuestionnaire(qid, deleteSheet) { const r = await adminPost({ action: 'deleteQuestionnaire', qid, deleteSheet: !!deleteSheet }); noteBackend(r); return r; }
+async function fetchQuestionnaire(qid) {
+  const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=schema&q=' + encodeURIComponent(qid));
+  const j = await r.json(); if (!j.ok || !j.schema) throw new Error('Questionnaire not found on the backend'); noteBackend(j); return j.schema;
+}
+/** Rows currently in a questionnaire's response tab (from the last ping), or null when unknown. */
+function rowsInSheet(sheet) { const t = (settings.backendSheets || []).find(x => x.name === sheet); return t ? t.rows : null; }
+/** Ask the admin where responses for an updated questionnaire should go. Resolves { sheetMode, sheetName } or null (cancelled). */
+function chooseResponseSheet(entry) {
+  return new Promise(resolve => {
+    const dlg = $('#sheetDlg'), cur = (entry && entry.sheet) || settings.backendSheet || 'Responses', n = rowsInSheet(cur);
+    $('#sheetDlgSub').textContent = `"${(entry && entry.title) || FORM_META.title}" currently collects into the sheet "${cur}"${n != null ? ` (${n} record${n === 1 ? '' : 's'})` : ''}. You are publishing a new version of it.`;
+    $$('input[name="sheetMode"]').forEach(r => r.checked = r.value === 'current');
+    $('#sheetName').value = `Responses ${new Date().toISOString().slice(0, 10)}`; $('#sheetNameWrap').hidden = true;
+    const onChange = () => { $('#sheetNameWrap').hidden = $('input[name="sheetMode"]:checked')?.value !== 'new'; };
+    $$('input[name="sheetMode"]').forEach(r => r.onchange = onChange);
+    const done = () => { dlg.removeEventListener('close', done); if (dlg.returnValue !== 'ok') return resolve(null); const mode = $('input[name="sheetMode"]:checked')?.value || 'current'; resolve({ sheetMode: mode, sheetName: mode === 'new' ? $('#sheetName').value.trim() : '' }); };
+    dlg.addEventListener('close', done); $('#sheetCancel').onclick = () => dlg.close('cancel');
+    dlg.returnValue = ''; dlg.showModal();
+  });
+}
 /** Back the questionnaire up to Drive without publishing it (needs the team key; silent when unavailable). */
 async function backupProject(schema) {
   if (!settings.endpoint || !adminToken() || !navigator.onLine) return null;
@@ -1396,8 +1446,14 @@ async function adminConnect() {
     if (/Invalid admin token/i.test(e.message)) { settings.adminKey = ''; settings.adminKeyOk = false; LS.set('gs_settings', settings); } // the key changed on the backend
   }
 }
+let adminSheetSel = ''; // '' = the active response tab
 async function adminLoad() {
-  const j = await adminFetch({ action: 'list', limit: 5000 });
+  // Response tabs (a questionnaire update may have started a new one): let the admin pick which to view
+  try { const p = await adminFetch({ action: 'ping' }); noteBackend(p); } catch {}
+  const sel = $('#adminSheet'), tabs = settings.backendSheets || [];
+  sel.hidden = tabs.length < 2;
+  if (tabs.length) { sel.innerHTML = tabs.map(t => `<option value="${esc(t.name)}">${esc(t.name)} (${t.rows})${t.name === settings.backendSheet ? ' · active' : ''}</option>`).join(''); sel.value = adminSheetSel || settings.backendSheet || tabs[0].name; }
+  const j = await adminFetch({ action: 'list', limit: 5000, ...(adminSheetSel ? { sheet: adminSheetSel } : {}) });
   adminRows = j.rows || [];
   const link = $('#adminSheetLink'); if (j.sheetUrl) { link.href = j.sheetUrl; link.hidden = false; }
   renderAdmin(); if (typeof Analysis !== 'undefined') Analysis.schedule();
@@ -1470,7 +1526,7 @@ function saveSettings(quiet = false) {
     folderUrl: endpoint === prev.endpoint ? prev.folderUrl || '' : '',
   };
   // What we know about the backend only holds while the endpoint is unchanged
-  if (settings.endpoint === prev.endpoint) { settings.backendAI = prev.backendAI; settings.backendVersion = prev.backendVersion; }
+  if (settings.endpoint === prev.endpoint) { settings.backendAI = prev.backendAI; settings.backendVersion = prev.backendVersion; settings.backendSheet = prev.backendSheet; settings.backendRows = prev.backendRows; settings.backendSheets = prev.backendSheets; }
   settings.deviceId = prev.deviceId; settings.adminKeyOk = settings.endpoint === prev.endpoint && settings.adminKey === prev.adminKey ? prev.adminKeyOk : false;
   if (quiet) return; // dry run for the connection test
   LS.set('gs_settings', settings);
@@ -1519,7 +1575,7 @@ function init() {
     e.preventDefault(); const st = $('#testAiStatus'); const saved = settings;
     saveSettings(true); setStatus(st, 'Testing…', '', true);
     try { setStatus(st, await testConnection(), 'ok'); } catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
-    finally { if (settings.endpoint === saved.endpoint) { saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; } settings = saved; LS.set('gs_settings', saved); updateEngineChip(); }
+    finally { if (settings.endpoint === saved.endpoint) { saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; saved.backendSheet = settings.backendSheet; saved.backendRows = settings.backendRows; saved.backendSheets = settings.backendSheets; } settings = saved; LS.set('gs_settings', saved); updateEngineChip(); }
   };
   $('#settingsDlg').addEventListener('close', () => { if ($('#settingsDlg').returnValue === 'save') saveSettings(); });
   $('#cancelSettingsBtn').onclick = $('#closeSettingsX').onclick = () => $('#settingsDlg').close('cancel');
@@ -1585,7 +1641,7 @@ function init() {
   $('#uploadFilesBtn').onclick = uploadMissingFiles;
   $('#testDbBtn').onclick = async e => {
     e.preventDefault(); const st = $('#testDbStatus'); const saved = settings; saveSettings(true); setStatus(st, 'Checking…', '', true);
-    try { const msg = await testDatabase(); saved.folderUrl = settings.folderUrl; saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; LS.set('gs_settings', saved); st.className = 'status ok'; st.innerHTML = esc(msg) + (settings.folderUrl ? ` · <a href="${esc(settings.folderUrl)}" target="_blank" rel="noopener">open Drive folder</a>` : ''); }
+    try { const msg = await testDatabase(); saved.folderUrl = settings.folderUrl; saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; saved.backendSheet = settings.backendSheet; saved.backendRows = settings.backendRows; saved.backendSheets = settings.backendSheets; LS.set('gs_settings', saved); st.className = 'status ok'; st.innerHTML = esc(msg) + (settings.folderUrl ? ` · <a href="${esc(settings.folderUrl)}" target="_blank" rel="noopener">open Drive folder</a>` : ''); }
     catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
     finally { settings = saved; updateEngineChip(); updateSettingsStatus(); }
   };
@@ -1596,6 +1652,7 @@ function init() {
   $('#adminConnectBtn').onclick = adminConnect;
   $('#adminToken').addEventListener('keydown', e => { if (e.key === 'Enter') adminConnect(); });
   $('#adminRefreshBtn').onclick = () => adminLoad().catch(e => toast(e.message, 'err'));
+  $('#adminSheet').onchange = e => { adminSheetSel = e.target.value; adminLoad().catch(err => toast(err.message, 'err')); };
   $('#adminSearch').oninput = renderAdmin;
   $('#adminExportBtn').onclick = () => Exports.csv(adminRows, 'geosurvey_all');
   $('#adminExportSpssBtn').onclick = () => Exports.spss(adminRows, 'geosurvey_all');

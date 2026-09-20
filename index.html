@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.16.4">
+  <link rel="stylesheet" href="styles.css?v=1.17.0">
 </head>
 <body>
   <header class="topbar">
@@ -163,6 +163,15 @@
           <button id="designerExport" class="gbtn" title="Download the draft as a .geosurvey project file (and copy it to Drive when the team key is stored)">Save project file</button>
         </div>
       </div>
+      <div class="qbar" id="qBar" hidden>
+        <label class="qbar-pick"><span>Questionnaire</span><select id="qPick" class="input input-sm"></select></label>
+        <span id="qInfo" class="qbar-info"></span>
+        <span class="qbar-actions">
+          <button type="button" id="qNew" class="gbtn" title="Start another questionnaire — it gets its own response tab in the same Google Sheet"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New</button>
+          <button type="button" id="qDefault" class="gbtn" title="Make this the default questionnaire that every phone follows"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6.5 7 1-5 5 1.2 7L12 18l-6.2 3.5L7 14.5l-5-5 7-1z"/></svg>Make default</button>
+          <button type="button" id="qDelete" class="gbtn danger" title="Delete this questionnaire (a response tab that holds records is always kept)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>Delete</button>
+        </span>
+      </div>
       <div id="designerIntake" hidden><div id="designerPages" class="thumb-strip"></div></div>
       <div class="gform">
         <div class="gform-main"><div id="designerBody"></div><div id="designerModel" class="an-note gmodel"></div></div>
@@ -195,6 +204,7 @@
           <div class="card-head">
             <div><h2>All submissions</h2><p class="sub" id="adminSummary"></p></div>
             <div class="btn-row">
+              <select id="adminSheet" class="input input-sm" title="Response sheet (tab) to view — a questionnaire update may have started a new one" hidden></select>
               <input type="search" id="adminSearch" class="input input-sm" placeholder="Search…">
               <button id="adminRefreshBtn" class="btn btn-outline btn-sm">Refresh</button>
               <button id="adminExportBtn" class="btn btn-outline btn-sm">CSV</button>
@@ -246,9 +256,9 @@
             <small id="endpointHint" class="hint-team" hidden></small>
             <span id="testDbStatus" class="status"></span>
           </label>
-          <div class="chips">
-            <button type="button" id="projectDriveBtn" class="chipbtn" title="Write <title>.geosurvey into the Drive folder (needs the team key)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 3v13"/><path d="M7 11l5 5 5-5"/></svg>Save project to Drive</button>
-            <button type="button" id="projectDlBtn" class="chipbtn" title="Download the .geosurvey project file: the questionnaire plus the team connection"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 12v6"/><path d="M9 15l3 3 3-3"/></svg>Download project file</button>
+          <div class="tile-row">
+            <button type="button" id="projectDriveBtn" class="stat-tile action important" title="Write <title>.geosurvey into the Drive folder (needs the team key)"><i class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.6A5 5 0 0 0 18 8h-1.3A7 7 0 1 0 5 14.9"/><path d="M12 12v9"/><path d="M8 16l4-4 4 4"/></svg></i><div><b>Save project to Drive</b><small>Questionnaire + connection, kept safe in your Drive folder</small></div></button>
+            <button type="button" id="projectDlBtn" class="stat-tile action important" title="Download the .geosurvey project file: the questionnaire plus the team connection"><i class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 11v7"/><path d="M9 15l3 3 3-3"/></svg></i><div><b>Download project file</b><small>.geosurvey copy on this device — open it on any phone</small></div></button>
           </div>
           <div class="set-grid">
             <label class="set-field">
@@ -387,6 +397,20 @@
     </div>
   </dialog>
 
+  <!-- Publish: where do responses for the updated questionnaire go? -->
+  <dialog id="sheetDlg" class="sheet-dlg">
+    <form method="dialog" class="dlg">
+      <h2>Where should new responses go?</h2>
+      <p class="sub" id="sheetDlgSub"></p>
+      <div class="radios">
+        <label class="radio"><input type="radio" name="sheetMode" value="current" checked><i></i><span><b>Continue in the current sheet</b><small>Best when you only reworded questions or added a few. Old and new records share one table; columns for new questions are added automatically.</small></span></label>
+        <label class="radio"><input type="radio" name="sheetMode" value="new"><i></i><span><b>Start a new sheet for this version</b><small>Best when questions, options or scales changed. Every sheet stays internally consistent, so exports and the Analysis tab never mix versions. Earlier sheets keep their data.</small></span></label>
+      </div>
+      <label class="set-field" id="sheetNameWrap" hidden><span>New sheet name</span><input type="text" id="sheetName" class="input" placeholder="Responses 2026-09-21"></label>
+      <div class="btn-row end"><button type="button" id="sheetCancel" class="btn btn-outline">Cancel</button><button value="ok" id="sheetOk" class="btn btn-primary">Publish</button></div>
+    </form>
+  </dialog>
+
   <!-- Team link QR code -->
   <dialog id="qrDlg" class="qr-dlg">
     <div class="dlg">
@@ -413,13 +437,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.16.4"></script>
-  <script src="qr.js?v=1.16.4"></script>
-  <script src="app.js?v=1.16.4"></script>
-  <script src="sav.js?v=1.16.4"></script>
-  <script src="exports.js?v=1.16.4"></script>
-  <script src="analysis.js?v=1.16.4"></script>
-  <script src="pdf.js?v=1.16.4"></script>
-  <script src="designer.js?v=1.16.4"></script>
+  <script src="config.js?v=1.17.0"></script>
+  <script src="qr.js?v=1.17.0"></script>
+  <script src="app.js?v=1.17.0"></script>
+  <script src="sav.js?v=1.17.0"></script>
+  <script src="exports.js?v=1.17.0"></script>
+  <script src="analysis.js?v=1.17.0"></script>
+  <script src="pdf.js?v=1.17.0"></script>
+  <script src="designer.js?v=1.17.0"></script>
 </body>
 </html>

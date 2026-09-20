@@ -4,7 +4,7 @@
  * Approve & apply (device) / Approve & publish (team via backend).
  * Depends on app.js globals: LOCATION_FIELDS, DEFAULT_SCHEMA, FIELD_TYPES, LIKERT, applySchema, currentSchema, deriveConstructs,
  * deriveModel, clone, LS, settings, activeEngine, engineReady, openSettings, geminiCall, gemmaCall, GEMINI_FALLBACK, GEMMA_FATAL, NO_ENGINE_MSG, extractJson,
- * askTeamKey, backupProject, downloadProject, parseProjectFile,
+ * askTeamKey, backupProject, downloadProject, parseProjectFile, adoptSchema, rowsInSheet, chooseResponseSheet, fetchQuestionnaire, setDefaultQuestionnaire, deleteQuestionnaire,
  * compressImage, canvasToDataUrl, adminToken, publishSchema, download, toast, setStatus, esc, $, $$. */
 'use strict';
 
@@ -25,11 +25,61 @@ const Designer = (() => {
   const typeName = t => (TYPES.find(x => x[0] === t) || TYPES[0])[1];
 
   /* ---------- state ---------- */
-  function load() { const saved = LS.get(DRAFT_KEY, null); draft = saved && saved.sections ? saved : currentSchema(); dirty = !!saved; active = null; render(); }
+  function load() { const saved = LS.get(DRAFT_KEY, null); draft = saved && saved.sections ? saved : currentSchema(); dirty = !!saved; active = null; render(); renderQBar(); }
   function persist() { LS.set(DRAFT_KEY, draft); dirty = true; $('#designerDirty').hidden = false; }
-  function loadSample() { if (draft.sections.length && !confirm('Replace the current draft with the sample questionnaire?')) return; draft = clone(DEFAULT_SCHEMA); active = null; persist(); render(); toast('Sample questionnaire loaded — customise, then Apply', 'ok'); }
-  function startBlank(ask = true) { if (ask && draft?.sections.length && !confirm('Start a blank questionnaire? The current draft will be replaced.')) return; draft = { ...clone(EMPTY_SCHEMA), title: draft?.title || '', sections: [{ id: 'section_1', title: 'Section 1', photoHint: '', fields: [{ k: '', label: '', type: 'text', ai: true }] }] }; active = '0:0'; persist(); render(); }
-  function discard() { draft = currentSchema(); LS.set(DRAFT_KEY, null); dirty = false; active = null; render(); }
+  // Sample / Blank edit the questionnaire currently selected (its id is kept); "New" starts a separate questionnaire
+  function loadSample() { if (draft.sections.length && !confirm('Replace the current draft with the sample questionnaire?')) return; draft = { ...clone(DEFAULT_SCHEMA), qid: draft.qid, sheet: draft.sheet }; active = null; persist(); render(); renderQBar(); toast('Sample questionnaire loaded — customise, then Apply', 'ok'); }
+  function startBlank(ask = true) { if (ask && draft?.sections.length && !confirm('Start a blank questionnaire? The current draft will be replaced.')) return; draft = { ...clone(EMPTY_SCHEMA), qid: draft?.qid, sheet: draft?.sheet, title: draft?.title || '', sections: [{ id: 'section_1', title: 'Section 1', photoHint: '', fields: [{ k: '', label: '', type: 'text', ai: true }] }] }; active = '0:0'; persist(); render(); renderQBar(); }
+  function discard() { draft = currentSchema(); LS.set(DRAFT_KEY, null); dirty = false; active = null; render(); renderQBar(); }
+
+  /* ---------- several questionnaires on the backend, each with its own response tab ---------- */
+  const qEntries = () => settings.questionnaires || [];
+  function renderQBar() {
+    const bar = $('#qBar'); if (!bar) return;
+    const list = qEntries(); bar.hidden = !settings.endpoint;
+    if (bar.hidden) return;
+    const sel = $('#qPick'), cur = draft?.qid || '';
+    const opts = list.map(q => { const n = rowsInSheet(q.sheet); return `<option value="${esc(q.id)}">${esc(q.title)}${q.id === settings.activeQid ? ' ★ default' : ''} · ${esc(q.sheet)}${n != null ? ` (${n})` : ''}</option>`; });
+    if (!cur || !list.some(q => q.id === cur)) opts.push(`<option value="">${esc(draft?.title || 'New questionnaire')} · not published yet</option>`);
+    sel.innerHTML = opts.join(''); sel.value = list.some(q => q.id === cur) ? cur : '';
+    const e = list.find(q => q.id === cur);
+    $('#qInfo').textContent = e ? `Responses go to "${e.sheet}"${e.id === settings.activeQid ? ' · phones follow this one' : ''}` : (list.length ? 'Not on the backend yet — Publish creates it with its own response tab' : 'Publish creates the first questionnaire with its own response tab');
+    $('#qDefault').disabled = !e || e.id === settings.activeQid; $('#qDelete').disabled = !e;
+  }
+  async function pickQuestionnaire(qid) {
+    if (!qid) return renderQBar();
+    if (dirty && !confirm('Discard the unsaved changes in the current draft?')) return renderQBar();
+    try {
+      const s = await fetchQuestionnaire(qid);
+      draft = { ...s, remarks: s.remarks || clone(DEFAULT_SCHEMA.remarks) }; LS.set(DRAFT_KEY, null); dirty = false; active = null; render(); renderQBar();
+      toast(`Loaded "${s.title || 'untitled'}" — Apply installs it on this phone, Publish updates it for the team`, 'ok');
+    } catch (e) { toast(e.message, 'err'); renderQBar(); }
+  }
+  function newQuestionnaire() {
+    if (dirty && !confirm('Discard the unsaved changes in the current draft?')) return;
+    const title = prompt('Title of the new questionnaire (it gets its own response tab in the Google Sheet):', ''); if (title === null) return;
+    draft = { ...clone(EMPTY_SCHEMA), qid: undefined, sheet: undefined, title: title.trim() || 'New questionnaire', sections: [{ id: 'section_1', title: 'Section 1', photoHint: '', fields: [{ k: '', label: '', type: 'text', ai: true }] }] };
+    active = '0:0'; persist(); render(); renderQBar();
+  }
+  async function makeDefault() {
+    const e = qEntries().find(q => q.id === draft.qid); if (!e) return;
+    if (!adminToken() && !askTeamKey('Changing the default questionnaire needs it')) return;
+    try { await setDefaultQuestionnaire(e.id); settings.pinnedQid = ''; LS.set('gs_settings', settings); renderQBar(); toast(`"${e.title}" is now the default — every phone adopts it on its next start`, 'ok'); }
+    catch (err) { toast('Could not change the default: ' + err.message, 'err'); }
+  }
+  async function deleteCurrent() {
+    const e = qEntries().find(q => q.id === draft.qid); if (!e) return;
+    const n = rowsInSheet(e.sheet);
+    if (!confirm(`Delete the questionnaire "${e.title}"?\n\nIts response tab "${e.sheet}"${n ? ` holds ${n} record(s) and will be KEPT in the Google Sheet` : ' is empty and will be removed'}. Phones that follow it switch to the default questionnaire.`)) return;
+    if (!adminToken() && !askTeamKey('Deleting a questionnaire needs it')) return;
+    try {
+      const r = await deleteQuestionnaire(e.id, !n);
+      if (settings.pinnedQid === e.id) { settings.pinnedQid = ''; LS.set('gs_settings', settings); }
+      toast(`Deleted "${e.title}"` + (r.tabDeleted ? ' and its empty tab' : r.rowsInTab ? ` — the tab "${e.sheet}" with ${r.rowsInTab} record(s) is kept` : ''), 'ok');
+      const next = qEntries().find(q => q.id === settings.activeQid) || qEntries()[0];
+      if (next) await pickQuestionnaire(next.id); else { draft = { ...clone(EMPTY_SCHEMA), sections: [] }; render(); renderQBar(); }
+    } catch (err) { toast('Could not delete: ' + err.message, 'err'); }
+  }
 
   /* ---------- rendering ---------- */
   function previewControl(f) {
@@ -221,17 +271,30 @@ const Designer = (() => {
     const d = normalise(clone(draft));
     const errs = validate(d);
     if (errs.length) return toast(errs[0] + (errs.length > 1 ? ` (+${errs.length - 1} more)` : ''), 'err');
-    d.version = Date.now();
-    LS.set('gs_schema', d); applySchema(d); LS.set(DRAFT_KEY, null); draft = currentSchema(); dirty = false; active = null; render();
-    toast('Questionnaire approved — survey, AI, exports, PDF and analysis now use it', 'ok');
+    d.version = Date.now(); d.qid = draft.qid || undefined; d.sheet = draft.sheet || undefined;
+    const entry = qEntries().find(q => q.id === d.qid) || null;
     if (publish) {
       if (!settings.endpoint) return toast('Set a database endpoint in Settings to publish to the team', 'err');
       if (!adminToken() && !askTeamKey('Publishing the questionnaire to every phone needs it')) return;
-      try { const r = await publishSchema(d); toast('Published — every device adopts this questionnaire on its next start' + (r.projectUrl && !/^ERROR/.test(r.projectUrl) ? ' · project file saved to Drive' : ''), 'ok'); }
-      catch (e) { toast('Publish failed: ' + e.message, 'err'); }
-    } else {
-      const r = await backupProject(d); if (r && r.projectUrl && !/^ERROR/.test(r.projectUrl)) toast('Project file backed up to the Drive folder', 'ok');
+      let opts = { qid: entry ? entry.id : '', sheetMode: 'current', setActive: false };
+      if (entry) { // updating: with data already collected, decide whether this version continues in the same tab or starts a fresh one
+        const n = rowsInSheet(entry.sheet);
+        if (n == null || n > 0) { const c = await chooseResponseSheet(entry); if (!c) return toast('Publish cancelled'); Object.assign(opts, c); }
+      } else if (qEntries().length) { // creating another questionnaire: should phones switch to it?
+        opts.setActive = confirm(`"${d.title || 'New questionnaire'}" will be created with its own response tab.\n\nOK = make it the DEFAULT that every phone follows.\nCancel = create it without changing the default (enumerators can still be pointed to it).`);
+      } else opts.setActive = true;
+      try {
+        const r = await publishSchema(d, opts);
+        adoptSchema(d); LS.set(DRAFT_KEY, null); draft = currentSchema(); dirty = false; active = null; render(); renderQBar();
+        settings.pinnedQid = r.active === r.qid ? '' : r.qid; LS.set('gs_settings', settings);
+        toast(`Published "${d.title || 'questionnaire'}" · responses go to "${r.sheet}"` + (r.active === r.qid ? ' · every phone adopts it on its next start' : ' · not the default; this phone stays on it') + (r.projectUrl && !/^ERROR/.test(r.projectUrl) ? ' · project file saved to Drive' : ''), 'ok');
+      } catch (e) { toast('Publish failed: ' + e.message, 'err'); }
+      return;
     }
+    adoptSchema(d); LS.set(DRAFT_KEY, null); draft = currentSchema(); dirty = false; active = null; render(); renderQBar();
+    if (settings.endpoint) { settings.pinnedQid = d.qid && d.qid !== settings.activeQid ? d.qid : ''; LS.set('gs_settings', settings); }
+    toast('Questionnaire approved on this phone — survey, AI, exports, PDF and analysis now use it', 'ok');
+    const r = await backupProject(d); if (r && r.projectUrl && !/^ERROR/.test(r.projectUrl)) toast('Project file backed up to the Drive folder', 'ok');
   }
   async function exportJson() {
     const d = normalise(clone(draft)); downloadProject(d);
@@ -349,7 +412,7 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
     finally { $('#designerImproveBtn').disabled = false; }
   }
 
-  function open() { if (!draft) load(); }
+  function open() { if (!draft) load(); else renderQBar(); }
   function init() {
     const body = $('#designerBody'); if (!body) return;
     body.addEventListener('input', onInput); body.addEventListener('change', onInput); body.addEventListener('click', onClick);
@@ -358,6 +421,10 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
     $('#designerModel').addEventListener('input', onInput);
     $('#designerFile').onchange = e => { intake([...e.target.files]); e.target.value = ''; };
     $('#designerAiBtn').onclick = aiConvert;
+    $('#qPick').onchange = e => pickQuestionnaire(e.target.value);
+    $('#qNew').onclick = newQuestionnaire;
+    $('#qDefault').onclick = makeDefault;
+    $('#qDelete').onclick = deleteCurrent;
     $('#designerImproveBtn').onclick = aiImprove;
     $('#designerAddQ').onclick = addQuestion;
     $('#designerAddSec').onclick = addSection;

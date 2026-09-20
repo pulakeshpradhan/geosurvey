@@ -31,7 +31,7 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.16.1';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.17.0';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -144,6 +144,11 @@ function getConfig_(key) {
   for (var i = 0; i < rows.length; i++) if (rows[i][0] === key) return rows[i][1];
   return null;
 }
+function deleteConfig_(key) {
+  var sh = configSheet_(); var n = sh.getLastRow(); if (n < 2) return;
+  var rows = sh.getRange(2, 1, n - 1, 1).getValues();
+  for (var i = rows.length - 1; i >= 0; i--) if (rows[i][0] === key) sh.deleteRow(i + 2);
+}
 function setConfig_(key, value) {
   var sh = configSheet_(); var n = sh.getLastRow(); var rows = n < 2 ? [] : sh.getRange(2, 1, n - 1, 1).getValues();
   for (var i = 0; i < rows.length; i++) if (rows[i][0] === key) { sh.getRange(i + 2, 2, 1, 2).setValues([[value, new Date().toISOString()]]); return; }
@@ -151,16 +156,51 @@ function setConfig_(key, value) {
 }
 
 function ss_() { return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet(); }
-function getSheet_() {
-  var ss = ss_();
-  var sh = ss.getSheetByName(SHEET_NAME);
-  if (!sh) {
-    sh = ss.insertSheet(SHEET_NAME);
-    sh.appendRow(['id', 'submitted_at', 'received_at']);
-    sh.setFrozenRows(1);
+/* ---- Questionnaires: several can coexist, each with its own dedicated response tab in this spreadsheet. ----
+ * Config keys: "questionnaires" (JSON list {id,title,sheet,version,created_at,updated_at}), "active_questionnaire" (the
+ * default every phone follows), "schema:<id>" (the questionnaire itself). Sheets are never renamed — the link between a
+ * questionnaire and its tab must stay intact. Legacy single "schema" + "responses_sheet" migrate on first use. */
+function qList_() {
+  var js = getConfig_('questionnaires'), list = [];
+  try { list = js ? JSON.parse(js) : []; } catch (e) { list = []; }
+  if (!list.length) { // migrate the single-questionnaire layout
+    var legacy = getConfig_('schema');
+    if (legacy) {
+      var s = {}; try { s = JSON.parse(legacy); } catch (e) {}
+      var entry = { id: 'q1', title: s.title || 'Questionnaire', sheet: String(getConfig_('responses_sheet') || SHEET_NAME), version: s.version || 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      s.qid = entry.id; s.sheet = entry.sheet;
+      setConfig_('schema:q1', JSON.stringify(s)); list = [entry]; setConfig_('questionnaires', JSON.stringify(list)); setConfig_('active_questionnaire', 'q1');
+    }
   }
-  return sh;
+  return list;
 }
+function qSave_(list) { setConfig_('questionnaires', JSON.stringify(list)); }
+function qActiveId_() { var list = qList_(); var a = getConfig_('active_questionnaire'); return list.some(function (q) { return q.id === a; }) ? a : (list[0] ? list[0].id : ''); }
+function qEntry_(id) { var list = qList_(); for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
+function qSchema_(id) { var js = id ? getConfig_('schema:' + id) : null; if (!js) return null; try { var s = JSON.parse(js); s.qid = id; return s; } catch (e) { return null; } }
+function activeSheetName_() { var e = qEntry_(qActiveId_()); return e ? e.sheet : SHEET_NAME; }
+function makeSheet_(name) { var sh = ss_().insertSheet(name); sh.appendRow(['id', 'submitted_at', 'received_at']); sh.setFrozenRows(1); return sh; }
+function getSheet_() { var name = activeSheetName_(); return ss_().getSheetByName(name) || makeSheet_(name); }
+/** Response tab for a questionnaire id (falls back to the active one). */
+function sheetForQ_(qid) { var e = qid ? qEntry_(String(qid)) : null; var name = e ? e.sheet : activeSheetName_(); return ss_().getSheetByName(name) || makeSheet_(name); }
+function sheetNameFor_(title) { var t = String(title || 'Questionnaire').replace(/[\[\]\*\?\/\\:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60); return uniqueSheetName_(SHEET_NAME + ' – ' + (t || 'Questionnaire')); }
+/** Every response tab, active first: SHEET_NAME and any tab named "SHEET_NAME …". */
+function responseSheets_() {
+  var act = activeSheetName_(), out = [getSheet_()];
+  ss_().getSheets().forEach(function (s) { var n = s.getName(); if (n !== act && (n === SHEET_NAME || n.indexOf(SHEET_NAME + ' ') === 0)) out.push(s); });
+  return out;
+}
+/** Locate a record by id in any response tab → { sh, row } or null. */
+function findRow_(id) {
+  var sheets = responseSheets_();
+  for (var s = 0; s < sheets.length; s++) {
+    var sh = sheets[s], n = sh.getLastRow(); if (n < 2) continue;
+    var ids = sh.getRange(2, 1, n - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(id)) return { sh: sh, row: i + 2 };
+  }
+  return null;
+}
+function uniqueSheetName_(base) { var ss = ss_(), name = base, i = 2; while (ss.getSheetByName(name)) name = base + ' (' + i++ + ')'; return name; }
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -230,7 +270,7 @@ function doPost(e) {
     if (data.action === 'attach') return attachFiles_(data); // (re)upload files for an existing row — no token needed
     if (data.action) return adminAction_(data);
 
-    var sh = getSheet_();
+    var sh = sheetForQ_(data.qid); // each questionnaire has its own tab; a queued record from an older questionnaire still lands in the right one
     var headers = headers_(sh);
     if (data.id && sh.getLastRow() > 1) {
       var ids = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]); });
@@ -270,13 +310,15 @@ function doPost(e) {
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
-    if (p.action === 'schema') { var js = getConfig_('schema'); return json_({ ok: true, schema: js ? JSON.parse(js) : null, ai: !!aiKey_(), aiModel: AI_MODEL, version: BACKEND_VERSION }); }
+    if (p.action === 'schema') { var qid = p.q ? String(p.q) : qActiveId_(); var s = qSchema_(qid); return json_({ ok: true, schema: s, active: qActiveId_(), questionnaires: qList_(), ai: !!aiKey_(), aiModel: AI_MODEL, sheet: s ? s.sheet : activeSheetName_(), version: BACKEND_VERSION }); }
     if (p.action === 'geocode') return json_(geocode_(parseFloat(p.lat), parseFloat(p.lon)));
     if (p.action === 'ping') { // health check: version, sheet, Drive folder (created if missing)
       var fu = '', ferr = ''; try { fu = folder_().getUrl(); } catch (e0) { ferr = /permission/i.test(String(e0)) ? 'DRIVE_NOT_AUTHORIZED' : String(e0); }
-      return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: Math.max(0, getSheet_().getLastRow() - 1), ai: !!aiKey_(), aiModel: AI_MODEL });
+      var tabs = responseSheets_().map(function (s) { return { name: s.getName(), rows: Math.max(0, s.getLastRow() - 1) }; });
+      return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: tabs[0].rows, sheet: activeSheetName_(), sheets: tabs, active: qActiveId_(), questionnaires: qList_(), ai: !!aiKey_(), aiModel: AI_MODEL });
     }
-    var sh = getSheet_();
+    var sh = p.q ? sheetForQ_(p.q) : getSheet_();
+    if (p.action === 'list' && p.sheet && isAdmin_(p.token)) sh = ss_().getSheetByName(String(p.sheet)) || sh; // admin may read an older tab
     var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
     if (p.action === 'list') { // token → every row; device=<id> → only rows that phone submitted (its id is a random secret)
       var admin = isAdmin_(p.token), device = String(p.device || '');
@@ -342,12 +384,9 @@ function geocode_(lat, lon) {
 }
 /** Store photos / audio / transcript for an already-submitted record and write the links into its row. */
 function attachFiles_(data) {
-  var sh = getSheet_(); var rid = String(data.id || '');
-  if (!rid || sh.getLastRow() < 2) return json_({ ok: false, error: 'Record not found' });
-  var ids = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues(); var row = -1;
-  for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === rid) { row = i + 2; break; }
-  if (row < 0) return json_({ ok: false, error: 'Record not found in the sheet — sync it first' });
-  var out = {};
+  var rid = String(data.id || ''), hit = rid ? findRow_(rid) : null;
+  if (!hit) return json_({ ok: false, error: 'Record not found in the sheet — sync it first' });
+  var sh = hit.sh, row = hit.row, out = {};
   if ((data.photos || []).length) out.photo_urls = savePhotos_(rid, data.photos, 'photo').join('\n');
   if ((data.audio || []).length) out.audio_urls = savePhotos_(rid, data.audio, 'audio').join('\n');
   if (data.interview_transcript && String(data.interview_transcript).trim()) {
@@ -362,19 +401,47 @@ function attachFiles_(data) {
 }
 function adminAction_(data) {
   if (!isAdmin_(data.token)) return json_({ ok: false, error: 'Invalid admin token' });
-  var sh = getSheet_();
   if (data.action === 'delete') {
-    if (sh.getLastRow() < 2) return json_({ ok: false, error: 'Not found' });
-    var ids = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
-    for (var i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]) === String(data.id)) { sh.deleteRow(i + 2); return json_({ ok: true, deleted: data.id }); }
-    }
-    return json_({ ok: false, error: 'Not found' });
+    var hit = findRow_(data.id);
+    if (!hit) return json_({ ok: false, error: 'Not found' });
+    hit.sh.deleteRow(hit.row); return json_({ ok: true, deleted: data.id, sheet: hit.sh.getName() });
   }
-  if (data.action === 'setSchema') {
+  if (data.action === 'setSchema') { // create a questionnaire (new dedicated tab) or update one (optionally moving new responses to a fresh tab)
     if (!data.schema || !data.schema.sections) return json_({ ok: false, error: 'No schema' });
-    setConfig_('schema', JSON.stringify(data.schema));
-    return json_({ ok: true, version: data.schema.version, projectUrl: saveProjectSafe_(data) });
+    var list = qList_(), now = new Date().toISOString(), qid = data.qid ? String(data.qid) : '', entry = qid ? qEntry_(qid) : null, title = String(data.schema.title || 'Questionnaire');
+    if (qid && !entry) return json_({ ok: false, error: 'Questionnaire not found — reload the list' });
+    if (!entry) {
+      qid = 'q' + Date.now().toString(36); var tab = sheetNameFor_(title); makeSheet_(tab);
+      entry = { id: qid, title: title, sheet: tab, version: data.schema.version, created_at: now, updated_at: now }; list.push(entry);
+    } else {
+      if (data.sheetMode === 'new') { // responses for this version start in a fresh tab; the old tab keeps its data
+        var base = String(data.sheetName || '').trim(); var nm = base ? uniqueSheetName_(base.indexOf(SHEET_NAME) === 0 ? base : SHEET_NAME + ' – ' + base) : sheetNameFor_(title + ' ' + now.slice(0, 10));
+        makeSheet_(nm); entry.sheet = nm;
+      }
+      entry.title = title; entry.version = data.schema.version; entry.updated_at = now;
+      for (var i = 0; i < list.length; i++) if (list[i].id === qid) list[i] = entry;
+    }
+    data.schema.qid = qid; data.schema.sheet = entry.sheet;
+    setConfig_('schema:' + qid, JSON.stringify(data.schema)); qSave_(list);
+    if (data.setActive || list.length === 1 || !qActiveId_()) setConfig_('active_questionnaire', qid);
+    return json_({ ok: true, qid: qid, version: data.schema.version, sheet: entry.sheet, active: qActiveId_(), questionnaires: list, projectUrl: saveProjectSafe_(data) });
+  }
+  if (data.action === 'deleteQuestionnaire') { // remove a questionnaire; its tab is deleted only when asked (deleteSheet) — never renamed
+    var qd = String(data.qid || ''), ent = qEntry_(qd); if (!ent) return json_({ ok: false, error: 'Questionnaire not found' });
+    var rest = qList_().filter(function (q) { return q.id !== qd; });
+    var tabSh = ss_().getSheetByName(ent.sheet), rowsInTab = tabSh ? Math.max(0, tabSh.getLastRow() - 1) : 0, tabDeleted = false;
+    if (data.deleteSheet && tabSh && rowsInTab === 0) { // a tab with data is always kept
+      var stillUsed = rest.some(function (q) { return q.sheet === ent.sheet; });
+      if (!stillUsed && ss_().getSheets().length > 1) { ss_().deleteSheet(tabSh); tabDeleted = true; }
+    }
+    qSave_(rest); deleteConfig_('schema:' + qd);
+    if (qActiveId_() === qd || !rest.some(function (q) { return q.id === getConfig_('active_questionnaire'); })) setConfig_('active_questionnaire', rest[0] ? rest[0].id : '');
+    return json_({ ok: true, deleted: qd, tabDeleted: tabDeleted, rowsInTab: rowsInTab, active: qActiveId_(), questionnaires: rest });
+  }
+  if (data.action === 'setActive') { // the default questionnaire every phone follows
+    if (!qEntry_(String(data.qid || ''))) return json_({ ok: false, error: 'Questionnaire not found' });
+    setConfig_('active_questionnaire', String(data.qid));
+    return json_({ ok: true, active: qActiveId_(), questionnaires: qList_() });
   }
   if (data.action === 'saveProject') { // Drive backup of a questionnaire that was only applied locally
     if (!data.schema || !data.schema.sections) return json_({ ok: false, error: 'No schema' });

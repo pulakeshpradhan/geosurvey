@@ -23,26 +23,35 @@ const Exports = (() => {
   /* ---------- SPSS system file (.sav) ----------
    * Binary .sav via sav.js: single-select fields coded 1..n with value labels (nominal), Likert 1–5 with labels (ordinal),
    * multi-select as a string column plus one 0/1 labelled dummy per option, numbers as scale, timestamps as DATETIME. */
+  /** SPSS variable names: letters, digits, _ only; must start with a letter; ≤ 64 chars; unique (case-insensitive). */
+  function spssNames() {
+    const used = new Set();
+    return raw => {
+      let n = String(raw || 'v').replace(/[^A-Za-z0-9_]/g, '_'); if (!/^[A-Za-z]/.test(n)) n = 'v_' + n; n = n.slice(0, 64);
+      let out = n, i = 2; while (used.has(out.toLowerCase())) { const suf = '_' + i++; out = n.slice(0, 64 - suf.length) + suf; }
+      used.add(out.toLowerCase()); return out;
+    };
+  }
   function spssVars() {
-    const vars = [];
+    const vars = [], name = spssNames();
     const width = get => Math.min(255, Math.max(1, ...rowsRef.map(r => new TextEncoder().encode(get(r)).length)));
     columns().forEach(f => {
-      const k = f.k;
-      if (k === 'submitted_at') return vars.push({ name: k, label: f.label, kind: 'datetime', measure: 'scale', get: r => val(r, k) });
-      if (f.type === 'select') {
-        const map = Object.fromEntries(f.options.map((o, i) => [o.toLowerCase(), i + 1]));
-        vars.push({ name: k, label: f.label, kind: 'num', width: 2, measure: 'nominal', values: f.options.map((o, i) => [i + 1, o]), get: r => map[val(r, k).toLowerCase()] ?? '' });
-      } else if (f.type === 'multi') {
+      const k = f.k, opts = (f.options || []).map(String).filter(Boolean), label = f.label || k;
+      if (k === 'submitted_at') return vars.push({ name: name(k), label, kind: 'datetime', measure: 'scale', get: r => val(r, k) });
+      if (f.type === 'select' && opts.length) {
+        const map = Object.fromEntries(opts.map((o, i) => [o.toLowerCase(), i + 1]));
+        vars.push({ name: name(k), label, kind: 'num', width: 2, measure: 'nominal', values: opts.map((o, i) => [i + 1, o]), get: r => map[val(r, k).trim().toLowerCase()] ?? '' });
+      } else if (f.type === 'multi' && opts.length) {
         const getList = r => val(r, k).split(';').map(s => s.trim().toLowerCase()).filter(Boolean);
-        vars.push({ name: k, label: f.label + ' (all selected)', kind: 'str', width: width(r => val(r, k)), measure: 'nominal', get: r => val(r, k) });
-        f.options.forEach((o, i) => vars.push({ name: `${k}_${i + 1}`, label: `${f.label}: ${o}`, kind: 'num', width: 1, measure: 'nominal', values: [[0, 'No'], [1, 'Yes']], get: r => val(r, k) ? (getList(r).includes(o.toLowerCase()) ? 1 : 0) : '' }));
+        vars.push({ name: name(k), label: label + ' (all selected)', kind: 'str', width: width(r => val(r, k)), measure: 'nominal', get: r => val(r, k) });
+        opts.forEach((o, i) => vars.push({ name: name(`${k}_${i + 1}`), label: `${label}: ${o}`, kind: 'num', width: 1, measure: 'nominal', values: [[0, 'No'], [1, 'Yes']], get: r => val(r, k) ? (getList(r).includes(o.toLowerCase()) ? 1 : 0) : '' }));
       } else if (f.type === 'likert') {
-        vars.push({ name: k, label: f.label, kind: 'num', width: 2, measure: 'ordinal', values: scaleOf(f).labels.map((l, i) => [i + 1, l]), get: r => { const n = parseInt(val(r, k), 10); return isNaN(n) ? '' : n; } });
+        vars.push({ name: name(k), label, kind: 'num', width: 2, measure: 'ordinal', values: scaleOf(f).labels.map((l, i) => [i + 1, String(l)]), get: r => { const n = parseInt(val(r, k), 10); return isNaN(n) ? '' : n; } });
       } else if (f.type === 'number' || ['latitude', 'longitude', 'gps_accuracy_m', 'altitude_m'].includes(k)) {
         const dec = ['latitude', 'longitude'].includes(k) ? 6 : 0;
-        vars.push({ name: k, label: f.label, kind: 'num', width: dec ? 12 : 8, decimals: dec, measure: 'scale', get: r => { const n = parseFloat(val(r, k)); return isNaN(n) ? '' : n; } });
+        vars.push({ name: name(k), label, kind: 'num', width: dec ? 12 : 8, decimals: dec, measure: 'scale', get: r => { const n = parseFloat(val(r, k)); return isNaN(n) ? '' : n; } });
       } else {
-        vars.push({ name: k, label: f.label, kind: 'str', width: width(r => val(r, k)), measure: 'nominal', get: r => val(r, k) });
+        vars.push({ name: name(k), label, kind: 'str', width: width(r => val(r, k)), measure: 'nominal', get: r => val(r, k) });
       }
     });
     return vars;
