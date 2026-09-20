@@ -30,7 +30,8 @@ p { margin: 0; }
 .icon-btn { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 6px; display: inline-flex; font: inherit; }
 .icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
 .icon-btn[hidden] { display: none; }
-#pdfBtn[hidden] { display: none; }
+#dbBtn.active { background: var(--accent-soft); border-color: var(--line-strong); }
+.action-bar #pdfBtn { gap: 5px; }
 .field textarea[readonly] { background: var(--card-soft); color: var(--muted-2); }
 .lock-note { font-size: 12.5px; color: var(--muted-2); margin-bottom: 10px; }
 .notice-bar { background: var(--rust-soft); color: var(--rust); border-left: 4px solid var(--rust); padding: 8px 20px; font-size: 13px; text-align: center; }

@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.17.3';
+const APP_VERSION = '1.17.4';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1089,7 +1089,7 @@ function getRecords() { return LS.get('gs_records', []); }
 function saveRecords(r) { LS.set('gs_records', r); updatePendingBadge(); if (typeof Analysis !== 'undefined') Analysis.schedule(); }
 function updatePendingBadge() {
   const n = getRecords().filter(r => r.status !== 'synced').length;
-  const b = $('#pendingBadge'); b.textContent = n; b.hidden = n === 0;
+  ['#pendingBadge', '#pendingBadge2'].forEach(s => { const b = $(s); if (b) { b.textContent = n; b.hidden = n === 0; } });
 }
 function validate() {
   let ok = true;
@@ -1349,15 +1349,22 @@ function renderLocalTable() {
     if (filesMissing(r)) return `<span class="pill failed" title="${esc(r.files_error || 'Files were not stored in Drive')}">not in Drive</span> <button class="link-btn" data-attach="${r.id}">Upload files</button>${r.files_error === DRIVE_HELP ? '<div class="dim" style="white-space:normal;max-width:320px;font-size:11.5px">Drive not authorised: run <code>authorizeDrive</code> in Apps Script, then Upload files.</div>' : ''}`;
     return `<span class="pill synced">in Drive</span> ${driveLinks(r)}`;
   };
+  const pdfBtn = r => `<button class="link-btn" data-pdf="${esc(r.id)}" title="A4 PDF of this record">PDF</button>`;
   const row = r => r.status === 'database'
-    ? `<tr class="team"><td><span class="pill database" title="Stored in the Google Sheet">database</span></td><td>${+r.photo_count ? `<span class="dim">${r.photo_count} 📷</span>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td></td></tr>`
-    : `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`;
+    ? `<tr class="team"><td><span class="pill database" title="Stored in the Google Sheet">database</span></td><td>${+r.photo_count ? `<span class="dim">${r.photo_count} 📷</span>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${pdfBtn(r)}</td></tr>`
+    : `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${pdfBtn(r)}${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`;
   $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th><th>Files in Drive</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>${records.map(row).join('')}</tbody>` : '';
   $$('#localTable [data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Delete this record (and its photos) from the device?')) return;
     await PhotoDB.del(b.dataset.del); saveRecords(getRecords().filter(r => r.id !== b.dataset.del)); renderLocalTable();
   });
   $$('#localTable [data-view]').forEach(i => i.onclick = async () => openGallery('Stamped photos', await PhotoDB.get(i.dataset.view)));
+  $$('#localTable [data-pdf]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.pdf, rec = allRecords().find(x => String(x.id) === id); if (!rec) return;
+    b.disabled = true;
+    try { await PdfExport.generate(rec, rec.status === 'database' ? [] : await PhotoDB.get(id)); } // database rows: photos stay in Drive, the PDF links to them
+    catch (e) { toast('PDF error: ' + e.message, 'err'); } finally { b.disabled = false; }
+  });
   $$('#localTable [data-attach]').forEach(b => b.onclick = async () => { b.disabled = true; const records = getRecords(); const rec = records.find(x => x.id === b.dataset.attach); let done = false; try { await attachFiles(rec); done = true; toast('Files uploaded to Drive', 'ok'); } catch (e) { rec.files_error = e.message; toast(e.message, 'err'); } saveRecords(records); if (done) { try { await refreshDbRows(); await pruneSynced(); } catch {} } renderLocalTable(); });
   $$('#localTable [data-audio]').forEach(b => b.onclick = async () => {
     const clips = await PhotoDB.getAudio(b.dataset.audio); const rec = getRecords().find(x => x.id === b.dataset.audio);
@@ -1547,7 +1554,7 @@ function showView(id) {
   $$('.view').forEach(v => v.hidden = v.id !== id);
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === id));
   $('#actionBar').hidden = id !== 'formView';
-  $('#pdfBtn').hidden = id !== 'formView';
+  $('#dbBtn').classList.toggle('active', id === 'responsesView');
   $('#editBtn').classList.toggle('active', id === 'editView');
   if (id === 'responsesView') { renderLocalTable(); if (settings.endpoint && navigator.onLine && !syncing && Date.now() - dbRowsAt > 60000) refreshDbRows().then(pruneSynced).then(renderLocalTable).catch(() => {}); }
   if (id === 'analysisView' && typeof Analysis !== 'undefined') Analysis.open();
@@ -1565,6 +1572,7 @@ function init() {
 
   $$('.tab').forEach(t => t.onclick = () => showView(t.dataset.view));
   const EDIT_WHY = 'Only the admin edits the questionnaire';
+  $('#dbBtn').onclick = () => showView('responsesView');
   $('#editBtn').onclick = async () => { if (await requireAdmin(EDIT_WHY)) showView('editView'); };
   $('#obDesign').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); if (typeof Designer !== 'undefined') Designer.startBlank(); };
   $('#obSample').onclick = async () => { if (await requireAdmin(EDIT_WHY)) useSampleQuestionnaire(); };

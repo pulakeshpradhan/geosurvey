@@ -47,7 +47,7 @@ The backend now keeps itself current: whenever a newer `Code.gs` is released, th
 3. **Analyze & fill.** AI-filled answers are highlighted in yellow for review. Complete the rest manually.
 4. **Submit.** Without internet the record is queued and sent automatically later.
 
-**PDF** produces an A4 copy of the filled form. Photos are camera-only and stamped with time, coordinates and address.
+**PDF** (bottom bar) produces an A4 copy of the form as filled right now; every saved record has its own **PDF** button in the Records tab (photos embedded for records on this phone, Drive links for records from other phones). Photos are camera-only and stamped with time, coordinates and address.
 
 ---
 

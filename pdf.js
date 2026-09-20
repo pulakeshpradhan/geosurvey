@@ -11,12 +11,17 @@ const PdfExport = (() => {
   function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load PDF library (offline?)')); document.head.appendChild(s); }); }
   async function jsPDF() { if (!window.jspdf) await loadScript(JSPDF_URL); return window.jspdf.jsPDF; }
 
-  async function generate() {
-    const rec = collect();
+  /** Make sure each photo knows its pixel size (photos restored from IndexedDB do not). */
+  const withDims = photoList => Promise.all(photoList.map(p => p.w && p.h ? p : new Promise(res => { const im = new Image(); im.onload = () => res({ ...p, w: im.naturalWidth, h: im.naturalHeight }); im.onerror = () => res({ ...p, w: 4, h: 3 }); im.src = p.dataUrl; })));
+  /** recIn: a record (defaults to the form being filled); photosIn: its photos (defaults to the ones captured now). */
+  async function generate(recIn = null, photosIn = null) {
+    const rec = recIn || collect();
+    const pics = await withDims(photosIn || (typeof photos !== 'undefined' ? photos : []));
+    const driveLinks = String(rec.photo_urls || '').split(/s+/).filter(u => /drive.google.com/.test(u));
     const title = clean(rec.head_name ? `Household of ${rec.head_name}` : 'Household survey record');
     const ref = `GS-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     let JsPDF;
-    try { JsPDF = await jsPDF(); } catch (e) { toast(e.message + ' — opening print view instead'); return printFallback(rec, ref); }
+    try { JsPDF = await jsPDF(); } catch (e) { toast(e.message + ' — opening print view instead'); return printFallback(rec, ref, pics); }
 
     const doc = new JsPDF({ unit: 'mm', format: 'a4', compress: true });
     const W = 210, H = 297, M = 15, CW = W - 2 * M, BOTTOM = H - 18;
@@ -132,11 +137,12 @@ const PdfExport = (() => {
     }
 
     // Photos
-    if (photos.length) {
-      sectionTitle(String(SECTIONS.length + 4).padStart(2, '0'), `Photographs (${photos.length})`);
+    if (!pics.length && driveLinks.length) { sectionTitle(String(SECTIONS.length + 4).padStart(2, '0'), `Photographs (${driveLinks.length}, stored in Google Drive)`); driveLinks.forEach((u, i) => { ensure(6); setFont('normal', 8.5, C.blue); doc.textWithLink(`Photo ${i + 1}: ${u}`, M + 2, y, { url: u }); y += 5.5; }); y += 2; }
+    if (pics.length) {
+      sectionTitle(String(SECTIONS.length + 4).padStart(2, '0'), `Photographs (${pics.length})`);
       const gap = 6, pw = (CW - gap) / 2, maxH = 62;
-      for (let i = 0; i < photos.length; i += 2) {
-        const pair = photos.slice(i, i + 2);
+      for (let i = 0; i < pics.length; i += 2) {
+        const pair = pics.slice(i, i + 2);
         const dims = pair.map(p => { const r = Math.min(pw / p.w, maxH / p.h); return { w: p.w * r, h: p.h * r }; });
         const rowH = Math.max(...dims.map(d => d.h)) + 10;
         ensure(rowH);
@@ -168,7 +174,7 @@ const PdfExport = (() => {
   }
 
   /* Fallback: styled print view (browser "Save as PDF") when the library cannot load. */
-  function printFallback(rec, ref) {
+  function printFallback(rec, ref, photos = []) {
     const v = f => { const x = rec[f.k]; return x === '' || x == null ? '—' : f.type === 'likert' ? `${x} – ${scaleOf(f).labels[+x - 1] || ''}` : esc(String(x).replace(/;\s*/g, ', ')); };
     const sec = (num, title, fields) => `<h2><span>${num}</span>${esc(title)}</h2><div class="g">${fields.map(f => `<div><small>${esc(f.label)}</small><b>${v(f)}</b></div>`).join('')}</div>`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(ref)}</title><style>
