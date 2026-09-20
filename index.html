@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.18.1">
+  <link rel="stylesheet" href="styles.css?v=1.18.2">
 </head>
 <body>
   <header class="topbar">
@@ -110,14 +110,19 @@
         <div class="card-head">
           <div><h2>Records</h2><p class="sub" id="localSummary"></p></div>
           <div class="btn-row">
-            <button id="syncBtn" class="btn btn-primary btn-sm" title="Send pending records, then show your records straight from the database">Sync</button>
-            <button id="syncAllBtn" class="btn btn-outline btn-sm" title="Also load every record submitted by the whole team (needs the team key)">Sync all</button>
-            <button id="uploadFilesBtn" class="btn btn-outline btn-sm" title="Re-upload photos, recordings and transcripts of synced records that are not yet in Drive">Upload files</button>
-            <a id="driveFolderLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" hidden>Open Drive folder</a>
-            <button id="exportCsvBtn" class="btn btn-outline btn-sm">Export CSV</button>
-            <button id="exportJsonBtn" class="btn btn-outline btn-sm">Export JSON</button>
-            <button id="exportSpssBtn" class="btn btn-outline btn-sm" title="SPSS .sav with variable labels, value labels and measurement levels">Export SPSS (.sav)</button>
-            <button id="exportKmzBtn" class="btn btn-outline btn-sm" title="Google Earth / GIS placemarks">Export KMZ</button>
+            <div class="btn-group">
+              <button id="syncBtn" class="btn btn-primary btn-sm" title="Send pending records, then show your records straight from the database">Sync</button>
+              <button id="syncAllBtn" class="btn btn-outline btn-sm" title="Also load every record submitted by the whole team (needs the team key)">Sync all</button>
+              <button id="uploadFilesBtn" class="btn btn-outline btn-sm" title="Re-upload photos, recordings and transcripts of synced records that are not yet in Drive">Upload files</button>
+              <a id="driveFolderLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" title="Open the Drive folder that holds the photos and recordings" hidden>Drive folder</a>
+            </div>
+            <div class="btn-group">
+              <span class="grp-lbl">Export</span>
+              <button id="exportCsvBtn" class="btn btn-outline btn-sm" title="Export as CSV (Excel)">CSV</button>
+              <button id="exportJsonBtn" class="btn btn-outline btn-sm" title="Export as JSON">JSON</button>
+              <button id="exportSpssBtn" class="btn btn-outline btn-sm" title="SPSS .sav with variable labels, value labels and measurement levels">SPSS</button>
+              <button id="exportKmzBtn" class="btn btn-outline btn-sm" title="Google Earth / GIS placemarks">KMZ</button>
+            </div>
           </div>
         </div>
         <div class="responsive"><div class="table-wrap"><table id="localTable" class="table"></table></div><div id="localCards" class="rec-cards"></div></div>
@@ -135,13 +140,15 @@
               <option value="device">Source: device records</option>
               <option value="cloud">Source: team database (Google Sheet)</option>
             </select>
-            <span id="anSampleTools" class="btn-row" hidden>
+            <span id="anSampleTools" class="btn-group" hidden>
               <label class="check-inline"><input type="checkbox" id="anIncludeSample" checked> include sample data</label>
               <button id="anSampleBtn" class="btn btn-outline btn-sm">Generate sample data</button>
-              <button id="anSampleClearBtn" class="btn btn-ghost btn-sm">Remove sample</button>
+              <button id="anSampleClearBtn" class="btn btn-outline btn-sm">Remove sample</button>
             </span>
-            <button id="anRunBtn" class="btn btn-primary btn-sm">Re-run</button>
-            <button id="anReportBtn" class="btn btn-outline btn-sm">Download report</button>
+            <div class="btn-group">
+              <button id="anRunBtn" class="btn btn-primary btn-sm">Re-run</button>
+              <button id="anReportBtn" class="btn btn-outline btn-sm">Download report</button>
+            </div>
           </div>
         </div>
         <div id="anStatus" class="status"></div>
@@ -184,7 +191,7 @@
       </div>
       <div class="approve-bar">
         <div><b>Approve</b> <span class="approve-hint">apply on this device, or publish so every enumerator’s device adopts it</span></div>
-        <div class="btn-row">
+        <div class="btn-row btn-group">
           <button id="designerDiscard" class="btn btn-ghost btn-sm">Discard</button>
           <button id="designerApply" class="btn btn-outline btn-sm">Apply</button>
           <button id="designerPublish" class="btn btn-primary btn-sm">Publish to team</button>
@@ -212,12 +219,17 @@
             <div class="btn-row">
               <select id="adminSheet" class="input input-sm" title="Response sheet (tab) to view — a questionnaire update may have started a new one" hidden></select>
               <input type="search" id="adminSearch" class="input input-sm" placeholder="Search…">
-              <button id="adminRefreshBtn" class="btn btn-outline btn-sm">Refresh</button>
-              <button id="adminExportBtn" class="btn btn-outline btn-sm">CSV</button>
-              <button id="adminExportSpssBtn" class="btn btn-outline btn-sm">SPSS</button>
-              <button id="adminExportKmzBtn" class="btn btn-outline btn-sm">KMZ</button>
-              <a id="adminSheetLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" hidden>Open sheet</a>
-              <button id="adminLogoutBtn" class="btn btn-ghost btn-sm">Disconnect</button>
+              <div class="btn-group">
+                <button id="adminRefreshBtn" class="btn btn-outline btn-sm" title="Reload the submissions from the database">Refresh</button>
+                <a id="adminSheetLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" title="Open the Google Sheet" hidden>Open sheet</a>
+                <button id="adminLogoutBtn" class="btn btn-outline btn-sm" title="Forget the team key on this device">Disconnect</button>
+              </div>
+              <div class="btn-group">
+                <span class="grp-lbl">Export</span>
+                <button id="adminExportBtn" class="btn btn-outline btn-sm" title="Export as CSV (Excel)">CSV</button>
+                <button id="adminExportSpssBtn" class="btn btn-outline btn-sm" title="SPSS .sav with variable labels, value labels and measurement levels">SPSS</button>
+                <button id="adminExportKmzBtn" class="btn btn-outline btn-sm" title="Google Earth / GIS placemarks">KMZ</button>
+              </div>
             </div>
           </div>
           <div class="responsive"><div class="table-wrap"><table id="adminTable" class="table"></table></div><div id="adminCards" class="rec-cards"></div></div>
@@ -470,13 +482,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.18.1"></script>
-  <script src="qr.js?v=1.18.1"></script>
-  <script src="app.js?v=1.18.1"></script>
-  <script src="sav.js?v=1.18.1"></script>
-  <script src="exports.js?v=1.18.1"></script>
-  <script src="analysis.js?v=1.18.1"></script>
-  <script src="pdf.js?v=1.18.1"></script>
-  <script src="designer.js?v=1.18.1"></script>
+  <script src="config.js?v=1.18.2"></script>
+  <script src="qr.js?v=1.18.2"></script>
+  <script src="app.js?v=1.18.2"></script>
+  <script src="sav.js?v=1.18.2"></script>
+  <script src="exports.js?v=1.18.2"></script>
+  <script src="analysis.js?v=1.18.2"></script>
+  <script src="pdf.js?v=1.18.2"></script>
+  <script src="designer.js?v=1.18.2"></script>
 </body>
 </html>
