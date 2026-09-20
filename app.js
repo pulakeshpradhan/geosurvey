@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.16.1';
+const APP_VERSION = '1.16.2';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -788,14 +788,15 @@ async function detectChromeAI() {
 }
 /** Backend Gemma: true once the backend reported a configured key, false when it reported none, undefined = not asked yet. */
 const backendGemma = () => !!settings.endpoint && settings.backendAI !== false;
-function activeEngine() {
-  if (settings.engine !== 'auto') return settings.engine;
-  if (settings.geminiKey) return 'gemini';
-  if (settings.orKey) return 'openrouter';
-  if (settings.endpoint && settings.backendAI) return 'gemma';
+/** What "Auto" resolves to for a given set of keys (defaults to the saved settings). */
+function autoEngine(s = settings) {
+  if (s.geminiKey) return 'gemini';
+  if (s.orKey) return 'openrouter';
+  if (s.endpoint && s.backendAI) return 'gemma';
   if (chromeAI) return 'chrome';
   return 'gemini';
 }
+function activeEngine() { return settings.engine !== 'auto' ? settings.engine : autoEngine(); }
 function engineReady() {
   const e = activeEngine();
   return e === 'gemini' ? !!settings.geminiKey : e === 'openrouter' ? !!settings.orKey : e === 'gemma' ? backendGemma() : !!chromeAI;
@@ -807,10 +808,23 @@ const NO_ENGINE_MSG = 'Set up AI in Settings first: an API key, or a database ba
 function updateEngineChip() {
   const chip = $('#engineChip');
   if (chip) { chip.textContent = engineLabel(); chip.className = 'chip ' + (engineReady() ? 'on' : ''); }
-  const opt = $('#setEngine option[value="chrome"]');
-  if (opt) opt.textContent = 'Chrome built-in AI (Gemini Nano, no key)' + (chromeAI ? (chromeAI === 'available' ? ' — ready' : ' — needs one-time download') : ' — not available in this browser');
-  const g = $('#setEngine option[value="gemma"]');
-  if (g) g.textContent = 'Gemma 4 via database backend (no key on this device)' + (!settings.endpoint ? ' — set the database endpoint first' : settings.backendAI === false ? ' — backend has no AI key yet' : settings.backendAI ? ' — ready' : '');
+  if ($('#settingsDlg')?.open) updateProviderUI();
+}
+const ENGINE_NAMES = { gemini: 'Gemini', openrouter: 'OpenRouter', gemma: 'Gemma 4', chrome: 'Chrome AI' };
+/** Settings dialog: status badge per provider (live from the typed keys) and show only the fields the chosen provider needs. */
+function updateProviderUI() {
+  const dlg = $('#settingsDlg'); if (!dlg) return;
+  const typed = { ...settings, geminiKey: $('#setKey').value.trim(), orKey: $('#setOrKey').value.trim(), endpoint: $('#setEndpoint').value.trim() || TEAM_ENDPOINT };
+  const st = {
+    gemini: typed.geminiKey ? ['ok', 'key saved'] : ['warn', 'needs key'],
+    openrouter: typed.orKey ? ['ok', 'key saved'] : ['warn', 'needs key'],
+    gemma: !typed.endpoint ? ['off', 'no database'] : settings.backendAI === false ? ['warn', 'no AI key in Code.gs'] : settings.backendAI ? ['ok', 'ready'] : ['', 'not checked'],
+    chrome: chromeAI ? (chromeAI === 'available' ? ['ok', 'ready'] : ['warn', 'needs download']) : ['off', 'not available'],
+  };
+  const a = autoEngine(typed); st.auto = st[a][0] === 'ok' ? ['ok', '→ ' + ENGINE_NAMES[a]] : ['warn', 'nothing set up yet'];
+  $$('.rstat[data-stat]').forEach(el => { const [cls, txt] = st[el.dataset.stat]; el.className = 'rstat ' + cls; el.textContent = txt; });
+  const eng = $('input[name="engine"]:checked')?.value || 'auto';
+  $$('[data-for]').forEach(el => el.hidden = !el.dataset.for.split(' ').includes(eng));
 }
 
 function promptFor(fields, ctx, sectionTitle, transcript = '', nAudio = 0) {
@@ -1390,15 +1404,18 @@ function renderAdmin() {
 /* ------------------------------------------------------------------ */
 const KNOWN_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-2.5-flash'];
 function openSettings() {
-  $('#setEngine').value = settings.engine; $('#setKey').value = settings.geminiKey;
+  $$('input[name="engine"]').forEach(r => r.checked = r.value === settings.engine); $('#setKey').value = settings.geminiKey;
   $('#setOrKey').value = settings.orKey; $('#setOrModel').value = settings.orModel; $('#setGemmaModel').value = settings.gemmaModel;
   const known = KNOWN_MODELS.includes(settings.model);
   $('#setModel').value = known ? settings.model : 'custom'; $('#setModelCustom').hidden = known; $('#setModelCustom').value = known ? '' : settings.model;
   $('#setEndpoint').value = settings.endpoint; $('#setTeamKey').value = settings.adminKey || ''; $('#setSurveyor').value = settings.surveyor;
-  $('#setMaxDim').value = settings.maxDim; $('#setRecLang').value = settings.recLang || ''; $('#setStamp').checked = settings.stamp; $('#setUploadPhotos').checked = settings.uploadPhotos; $('#setSampleTools').checked = settings.sampleTools;
-  updateEndpointHint();
+  $$('input[name="maxdim"]').forEach(r => r.checked = +r.value === +settings.maxDim); $('#setRecLang').value = settings.recLang || ''; $('#setStamp').checked = settings.stamp; $('#setUploadPhotos').checked = settings.uploadPhotos; $('#setSampleTools').checked = settings.sampleTools;
+  $('#setVersion').textContent = 'v' + APP_VERSION + (settings.backendVersion ? ` · backend v${settings.backendVersion}` : '');
+  $$('.pw input').forEach(i => { i.type = 'password'; i.nextElementSibling.textContent = '👁'; });
+  setStatus($('#testAiStatus'), ''); setStatus($('#testDbStatus'), '');
+  updateEndpointHint(); updateProviderUI();
   $('#settingsDlg').returnValue = ''; // Escape keeps the previous value otherwise, which could re-save
-  $('#settingsDlg').showModal();
+  $('#settingsDlg').showModal(); $('.set-body').scrollTop = 0;
 }
 function updateEndpointHint() {
   const typed = $('#setEndpoint').value.trim(); const h = $('#endpointHint');
@@ -1412,13 +1429,13 @@ function saveSettings(quiet = false) {
   const modelSel = $('#setModel').value; const prev = settings;
   const typed = $('#setEndpoint').value.trim(); const endpoint = typed || TEAM_ENDPOINT;
   settings = {
-    engine: $('#setEngine').value, geminiKey: $('#setKey').value.trim(),
+    engine: $('input[name="engine"]:checked')?.value || 'auto', geminiKey: $('#setKey').value.trim(),
     model: modelSel === 'custom' ? ($('#setModelCustom').value.trim() || DEFAULT_SETTINGS.model) : modelSel,
     orKey: $('#setOrKey').value.trim(), orModel: $('#setOrModel').value.trim() || DEFAULT_SETTINGS.orModel,
     gemmaModel: $('#setGemmaModel').value || DEFAULT_SETTINGS.gemmaModel,
     endpoint, endpointSource: !endpoint ? '' : endpoint === prev.endpoint ? prev.endpointSource : endpoint === TEAM_ENDPOINT ? 'team' : 'user',
     adminKey: $('#setTeamKey').value.trim(), surveyor: $('#setSurveyor').value.trim(),
-    maxDim: +$('#setMaxDim').value, recLang: $('#setRecLang').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
+    maxDim: +($('input[name="maxdim"]:checked')?.value || DEFAULT_SETTINGS.maxDim), recLang: $('#setRecLang').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
     folderUrl: endpoint === prev.endpoint ? prev.folderUrl || '' : '',
   };
   // What we know about the backend only holds while the endpoint is unchanged
@@ -1474,7 +1491,10 @@ function init() {
     finally { if (settings.endpoint === saved.endpoint) { saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; } settings = saved; LS.set('gs_settings', saved); updateEngineChip(); }
   };
   $('#settingsDlg').addEventListener('close', () => { if ($('#settingsDlg').returnValue === 'save') saveSettings(); });
-  $('#cancelSettingsBtn').onclick = () => $('#settingsDlg').close('cancel');
+  $('#cancelSettingsBtn').onclick = $('#closeSettingsX').onclick = () => $('#settingsDlg').close('cancel');
+  $$('input[name="engine"]').forEach(r => r.onchange = updateProviderUI);
+  ['setKey', 'setOrKey', 'setEndpoint'].forEach(id => $('#' + id).addEventListener('input', updateProviderUI));
+  $$('.pw .eye').forEach(b => b.onclick = () => { const i = b.previousElementSibling; i.type = i.type === 'password' ? 'text' : 'password'; b.textContent = i.type === 'password' ? '👁' : '🙈'; });
   // Enter inside a field must not submit the dialog (the first submit button is Cancel): run the matching test instead
   $('#settingsDlg form').addEventListener('keydown', e => {
     if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;

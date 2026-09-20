@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.16.1">
+  <link rel="stylesheet" href="styles.css?v=1.16.2">
 </head>
 <body>
   <header class="topbar">
@@ -222,97 +222,123 @@
   </div>
 
   <!-- Settings dialog -->
-  <dialog id="settingsDlg">
-    <form method="dialog" class="dlg">
-      <h2>Settings</h2>
+  <dialog id="settingsDlg" class="set-dlg">
+    <form method="dialog" class="set">
+      <div class="set-head">
+        <h2>Settings</h2>
+        <button type="button" id="closeSettingsX" class="icon-btn" aria-label="Close">✕</button>
+      </div>
 
-      <fieldset>
-        <legend>Image analysis</legend>
-        <label>Provider
-          <select id="setEngine" class="input">
-            <option value="auto">Auto — Gemini key → OpenRouter key → Gemma 4 via backend → Chrome built-in AI</option>
-            <option value="gemini">Google Gemini API</option>
-            <option value="openrouter">OpenRouter API (many models, incl. free ones)</option>
-            <option value="gemma">Gemma 4 via database backend (no key on this device)</option>
-            <option value="chrome">Chrome built-in AI (Gemini Nano, no key)</option>
-          </select>
-          <small>Gemma 4 via backend: your admin pastes one free key into the Apps Script (<code>AI_KEY</code>); every phone that uses that database endpoint then gets photo auto-fill with nothing to set up. Chrome built-in AI needs a recent desktop Chrome with the Prompt API enabled and does not work on most phones.</small>
-        </label>
-        <label>Gemma 4 model (via backend)
-          <select id="setGemmaModel" class="input">
-            <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it — fast, default</option>
-            <option value="gemma-4-31b-it">gemma-4-31b-it — most capable, slower</option>
-          </select>
-        </label>
-        <label>Gemini API key
-          <input type="password" id="setKey" class="input" placeholder="AIza…" autocomplete="off">
-          <small>Free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>. Keys are stored only in this browser.</small>
-        </label>
-        <label>Gemini model
-          <select id="setModel" class="input">
-            <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite — ultra-fast, lightweight (default)</option>
-            <option value="gemini-3.6-flash">gemini-3.6-flash — multi-step reasoning, fewer tokens</option>
-            <option value="gemini-3.7-flash">gemini-3.7-flash — everyday driver</option>
-            <option value="gemini-3.8-flash">gemini-3.8-flash — high-intelligence workhorse</option>
-            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-            <option value="custom">Custom…</option>
-          </select>
-          <input type="text" id="setModelCustom" class="input" placeholder="model id, e.g. gemini-3.5-flash" hidden>
-        </label>
-        <label>OpenRouter API key
-          <input type="password" id="setOrKey" class="input" placeholder="sk-or-…" autocomplete="off">
-          <small>Key from <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Pick any vision-capable model; models ending in <code>:free</code> cost nothing.</small>
-        </label>
-        <label>OpenRouter model
-          <input type="text" id="setOrModel" class="input" list="orModels" placeholder="e.g. google/gemini-2.5-flash">
-          <datalist id="orModels">
-            <option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite — fast, cheap</option>
-            <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="qwen/qwen2.5-vl-72b-instruct:free">Qwen 2.5 VL 72B — free</option>
-            <option value="meta-llama/llama-3.2-11b-vision-instruct:free">Llama 3.2 11B Vision — free</option>
-            <option value="mistralai/mistral-small-3.2-24b-instruct:free">Mistral Small 3.2 — free</option>
-            <option value="openai/gpt-4o-mini">GPT-4o mini</option>
-            <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
-          </datalist>
-        </label>
-        <div class="btn-row"><button type="button" id="testAiBtn" class="btn btn-outline btn-sm">Test connection</button><span id="testAiStatus" class="status" style="margin:0"></span></div>
-        <label>Image size sent to AI
-          <select id="setMaxDim" class="input">
-            <option value="768">768 px — fastest</option>
-            <option value="1024" selected>1024 px — balanced</option>
-            <option value="1536">1536 px — more detail</option>
-          </select>
-        </label>
-      </fieldset>
-
-      <fieldset>
-        <legend>Data</legend>
-        <label>Database endpoint (Apps Script Web App URL)
-          <input type="url" id="setEndpoint" class="input" placeholder="https://script.google.com/macros/s/…/exec">
-          <small id="endpointHint" class="hint-team" hidden></small>
-          <small>Follow the <a href="guide/" target="_blank" rel="noopener">step-by-step setup slides</a> (or the <a href="https://github.com/pulakeshpradhan/geosurvey#readme" target="_blank" rel="noopener">written guide</a>). Blank = keep data on this device only. The backend updates itself; after editing Code.gs run <code>updateBackend</code>.</small>
-        </label>
-        <div class="btn-row"><button type="button" id="testDbBtn" class="btn btn-outline btn-sm">Test database</button><button type="button" id="teamLinkBtn" class="btn btn-outline btn-sm" title="A link that connects any phone to this database when opened" hidden>Copy team link</button><button type="button" id="projectDriveBtn" class="btn btn-outline btn-sm" title="Write <title>.geosurvey into the Drive folder (needs the team key)">Save project to Drive</button><button type="button" id="projectDlBtn" class="btn btn-outline btn-sm" title="Download the .geosurvey project file to this device: the questionnaire plus the team connection. Open it on any phone from the start page.">Download project file</button><span id="testDbStatus" class="status" style="margin:0"></span></div>
-        <label>Team key (optional — unlocks the whole team's records)
-          <input type="password" id="setTeamKey" class="input" placeholder="e.g. GeoSurvey" autocomplete="off">
-          <small>The <code>ADMIN_TOKEN</code> in Code.gs (default <code>GeoSurvey</code>). With it, <b>Sync all</b> in Records shows every record submitted by the team; without it this phone only sends its own records.</small>
-        </label>
-        <label>Enumerator name (default)
-          <input type="text" id="setSurveyor" class="input">
-        </label>
-        <label>Interview language (for transcription)
-          <select id="setRecLang" class="input">
-            <option value="">Auto-detect language</option>
+      <div class="set-body">
+        <!-- Team & database -->
+        <section class="set-card">
+          <div class="set-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg>Team &amp; database</div>
+          <label class="set-field">
+            <span>Database endpoint <em>Apps Script Web App URL</em></span>
+            <div class="igroup"><input type="url" id="setEndpoint" class="input" placeholder="https://script.google.com/macros/s/…/exec"><button type="button" id="testDbBtn" class="btn btn-outline btn-sm">Test</button></div>
+            <small id="endpointHint" class="hint-team" hidden></small>
+            <span id="testDbStatus" class="status"></span>
+          </label>
+          <div class="chips">
+            <button type="button" id="teamLinkBtn" class="chipbtn" hidden title="A link that connects any phone to this database when opened">Copy team link</button>
+            <button type="button" id="projectDriveBtn" class="chipbtn" title="Write <title>.geosurvey into the Drive folder (needs the team key)">Save project to Drive</button>
+            <button type="button" id="projectDlBtn" class="chipbtn" title="Download the .geosurvey project file: the questionnaire plus the team connection">Download project file</button>
+            <a class="chipbtn" href="guide/" target="_blank" rel="noopener">Setup guide</a>
+          </div>
+          <div class="set-grid">
+            <label class="set-field">
+              <span>Team key <em>optional</em></span>
+              <div class="pw"><input type="password" id="setTeamKey" class="input" placeholder="e.g. GeoSurvey" autocomplete="off"><button type="button" class="eye" aria-label="Show">👁</button></div>
+              <small>Unlocks <b>Sync all</b> and <b>Edit</b> on this phone.</small>
+            </label>
+            <label class="set-field">
+              <span>Enumerator name</span>
+              <input type="text" id="setSurveyor" class="input" placeholder="Your name">
+            </label>
+          </div>
+          <label class="set-field">
+            <span>Interview language <em>for transcription</em></span>
+            <select id="setRecLang" class="input">
+              <option value="">Auto-detect language</option>
             <option value="Hindi">हिन्दी · Hindi</option><option value="Bengali">বাংলা · Bengali</option><option value="Telugu">తెలుగు · Telugu</option><option value="Marathi">मराठी · Marathi</option><option value="Tamil">தமிழ் · Tamil</option><option value="Gujarati">ગુજરાતી · Gujarati</option><option value="Urdu">اردو · Urdu</option><option value="Kannada">ಕನ್ನಡ · Kannada</option><option value="Odia">ଓଡ଼ିଆ · Odia</option><option value="Malayalam">മലയാളം · Malayalam</option><option value="Punjabi">ਪੰਜਾਬੀ · Punjabi</option><option value="Assamese">অসমীয়া · Assamese</option><option value="Maithili">मैथिली · Maithili</option><option value="Santali">ᱥᱟᱱᱛᱟᱲᱤ · Santali</option><option value="Kashmiri">کٲشُر · Kashmiri</option><option value="Nepali">नेपाली · Nepali</option><option value="Sindhi">سنڌي · Sindhi</option><option value="Konkani">कोंकणी · Konkani</option><option value="Dogri">डोगरी · Dogri</option><option value="Manipuri (Meitei)">ꯃꯤꯇꯩꯂꯣꯟ · Manipuri</option><option value="Bodo">बड़ो · Bodo</option><option value="Sanskrit">संस्कृतम् · Sanskrit</option><option value="Bhojpuri">भोजपुरी · Bhojpuri</option><option value="Rajasthani">राजस्थानी · Rajasthani</option><option value="Chhattisgarhi">छत्तीसगढ़ी · Chhattisgarhi</option><option value="Tulu">ತುಳು · Tulu</option><option value="Indian English">English (India)</option>
-          </select>
-          <small>Treated as the main language of the interview; switches to English or other languages are still detected automatically. Form values are always filled in English.</small>
-        </label>
-        <label class="check"><input type="checkbox" id="setStamp" checked> Stamp photos with date, time, coordinates and address</label>
-        <label class="check"><input type="checkbox" id="setUploadPhotos" checked> Upload stamped photos and interview recordings to Google Drive with each submission</label>
-        <label class="check"><input type="checkbox" id="setSampleTools"> Show sample-data tools in the Analysis tab (synthetic households for testing; kept separate from real records)</label>
-      </fieldset>
+            </select>
+          </label>
+        </section>
 
-      <div class="btn-row end">
+        <!-- AI photo-fill -->
+        <section class="set-card">
+          <div class="set-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>AI photo-fill <span class="set-sub">Provider</span></div>
+          <div class="radios" id="engineRadios">
+            <label class="radio"><input type="radio" name="engine" value="auto"><i></i><span><b>Auto</b><small>First available: Gemini key → OpenRouter key → team backend → Chrome</small></span><em class="rstat" data-stat="auto"></em></label>
+            <label class="radio"><input type="radio" name="engine" value="gemma"><i></i><span><b>Gemma 4 via team backend</b><small>No key on this phone — the admin's key in Code.gs serves everyone</small></span><em class="rstat" data-stat="gemma"></em></label>
+            <label class="radio"><input type="radio" name="engine" value="gemini"><i></i><span><b>Google Gemini</b><small>Your own free key · required for voice recordings</small></span><em class="rstat" data-stat="gemini"></em></label>
+            <label class="radio"><input type="radio" name="engine" value="openrouter"><i></i><span><b>OpenRouter</b><small>Many models, some free</small></span><em class="rstat" data-stat="openrouter"></em></label>
+            <label class="radio"><input type="radio" name="engine" value="chrome"><i></i><span><b>Chrome built-in AI</b><small>Desktop Chrome only, no key</small></span><em class="rstat" data-stat="chrome"></em></label>
+          </div>
+
+          <div class="set-grid" data-for="gemma auto">
+            <label class="set-field"><span>Gemma model</span>
+              <select id="setGemmaModel" class="input"><option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it · fast (default)</option><option value="gemma-4-31b-it">gemma-4-31b-it · most capable</option></select>
+            </label>
+          </div>
+          <div class="set-grid" data-for="gemini auto">
+            <label class="set-field"><span>Gemini API key <em><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">get a free key</a></em></span>
+              <div class="pw"><input type="password" id="setKey" class="input" placeholder="AIza…" autocomplete="off"><button type="button" class="eye" aria-label="Show">👁</button></div>
+            </label>
+            <label class="set-field"><span>Gemini model</span>
+              <select id="setModel" class="input">
+                <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite · fastest (default)</option>
+                <option value="gemini-3.6-flash">gemini-3.6-flash · reasoning</option>
+                <option value="gemini-3.7-flash">gemini-3.7-flash · everyday</option>
+                <option value="gemini-3.8-flash">gemini-3.8-flash · most capable</option>
+                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                <option value="custom">Custom…</option>
+              </select>
+              <input type="text" id="setModelCustom" class="input" placeholder="model id, e.g. gemini-3.5-flash" hidden>
+            </label>
+          </div>
+          <div class="set-grid" data-for="openrouter auto">
+            <label class="set-field"><span>OpenRouter API key <em><a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a></em></span>
+              <div class="pw"><input type="password" id="setOrKey" class="input" placeholder="sk-or-…" autocomplete="off"><button type="button" class="eye" aria-label="Show">👁</button></div>
+            </label>
+            <label class="set-field"><span>OpenRouter model</span>
+              <input type="text" id="setOrModel" class="input" list="orModels" placeholder="e.g. google/gemini-2.5-flash">
+              <datalist id="orModels">
+                <option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite — fast, cheap</option>
+                <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                <option value="qwen/qwen2.5-vl-72b-instruct:free">Qwen 2.5 VL 72B — free</option>
+                <option value="meta-llama/llama-3.2-11b-vision-instruct:free">Llama 3.2 11B Vision — free</option>
+                <option value="mistralai/mistral-small-3.2-24b-instruct:free">Mistral Small 3.2 — free</option>
+                <option value="openai/gpt-4o-mini">GPT-4o mini</option>
+                <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
+              </datalist>
+            </label>
+          </div>
+
+          <div class="set-row">
+            <div class="set-field"><span>Image size sent to AI</span>
+              <div class="seg" role="radiogroup">
+                <label><input type="radio" name="maxdim" value="768"><span>768 px<small>fastest</small></span></label>
+                <label><input type="radio" name="maxdim" value="1024" checked><span>1024 px<small>balanced</small></span></label>
+                <label><input type="radio" name="maxdim" value="1536"><span>1536 px<small>detail</small></span></label>
+              </div>
+            </div>
+            <div class="set-field test"><span>&nbsp;</span><button type="button" id="testAiBtn" class="btn btn-outline btn-sm">Test connection</button></div>
+          </div>
+          <span id="testAiStatus" class="status"></span>
+        </section>
+
+        <!-- Photos & privacy -->
+        <section class="set-card">
+          <div class="set-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Photos &amp; data</div>
+          <label class="toggle"><span><b>Stamp photos</b><small>Date, time, coordinates and address on every photo</small></span><input type="checkbox" id="setStamp" checked><i></i></label>
+          <label class="toggle"><span><b>Upload files to Drive</b><small>Stamped photos and recordings go with each submission</small></span><input type="checkbox" id="setUploadPhotos" checked><i></i></label>
+          <label class="toggle"><span><b>Sample-data tools</b><small>Synthetic households in the Analysis tab, kept apart from real records</small></span><input type="checkbox" id="setSampleTools"><i></i></label>
+        </section>
+      </div>
+
+      <div class="set-foot">
+        <span class="set-ver">GeoSurvey <span id="setVersion"></span></span>
         <button type="button" id="cancelSettingsBtn" class="btn btn-outline">Cancel</button>
         <button value="save" id="saveSettingsBtn" class="btn btn-primary">Save</button>
       </div>
@@ -372,13 +398,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.16.1"></script>
-  <script src="qr.js?v=1.16.1"></script>
-  <script src="app.js?v=1.16.1"></script>
-  <script src="sav.js?v=1.16.1"></script>
-  <script src="exports.js?v=1.16.1"></script>
-  <script src="analysis.js?v=1.16.1"></script>
-  <script src="pdf.js?v=1.16.1"></script>
-  <script src="designer.js?v=1.16.1"></script>
+  <script src="config.js?v=1.16.2"></script>
+  <script src="qr.js?v=1.16.2"></script>
+  <script src="app.js?v=1.16.2"></script>
+  <script src="sav.js?v=1.16.2"></script>
+  <script src="exports.js?v=1.16.2"></script>
+  <script src="analysis.js?v=1.16.2"></script>
+  <script src="pdf.js?v=1.16.2"></script>
+  <script src="designer.js?v=1.16.2"></script>
 </body>
 </html>
