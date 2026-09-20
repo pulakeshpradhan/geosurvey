@@ -31,7 +31,7 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.17.0';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.17.3';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -315,7 +315,7 @@ function doGet(e) {
     if (p.action === 'ping') { // health check: version, sheet, Drive folder (created if missing)
       var fu = '', ferr = ''; try { fu = folder_().getUrl(); } catch (e0) { ferr = /permission/i.test(String(e0)) ? 'DRIVE_NOT_AUTHORIZED' : String(e0); }
       var tabs = responseSheets_().map(function (s) { return { name: s.getName(), rows: Math.max(0, s.getLastRow() - 1) }; });
-      return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: tabs[0].rows, sheet: activeSheetName_(), sheets: tabs, active: qActiveId_(), questionnaires: qList_(), ai: !!aiKey_(), aiModel: AI_MODEL });
+      return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), scriptUrl: 'https://script.google.com/d/' + ScriptApp.getScriptId() + '/edit', folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: tabs[0].rows, sheet: activeSheetName_(), sheets: tabs, active: qActiveId_(), questionnaires: qList_(), ai: !!aiKey_(), aiModel: AI_MODEL });
     }
     var sh = p.q ? sheetForQ_(p.q) : getSheet_();
     if (p.action === 'list' && p.sheet && isAdmin_(p.token)) sh = ss_().getSheetByName(String(p.sheet)) || sh; // admin may read an older tab

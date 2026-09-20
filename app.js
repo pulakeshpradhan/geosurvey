@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.17.2';
+const APP_VERSION = '1.17.3';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -849,6 +849,8 @@ function updateSettingsStatus() {
   ai.className = 'stat-tile clickable ' + (ready ? 'ok' : 'warn');
   $('#stAiText').textContent = ready ? `Ready · ${engineLabel()} · tap to test` : 'Not set up — tap to get a free key, or ask your admin to enable Gemma 4 on the backend';
   $('#quickQr').disabled = $('#teamLinkBtn').disabled = !(settings.endpoint || TEAM_ENDPOINT);
+  // Links to the spreadsheet and its Apps Script project, known after the first Test database / ping
+  [['#sheetOpenBtn', settings.sheetUrl], ['#scriptOpenBtn', settings.scriptUrl]].forEach(([id, url]) => { const a = $(id); a.hidden = !url; if (url) a.href = url; });
 }
 /** Tile actions: Database → test (or focus the URL field); AI → test when ready, otherwise guide to a key. */
 function tileDbAction() {
@@ -1122,12 +1124,14 @@ function noteBackend(j) {
   if (j.folderUrl) settings.folderUrl = j.folderUrl;
   if (j.version) settings.backendVersion = j.version;
   if (j.sheet) settings.backendSheet = j.sheet;
+  if (j.sheetUrl) settings.sheetUrl = j.sheetUrl;
+  if (j.scriptUrl) settings.scriptUrl = j.scriptUrl;
   if (typeof j.active === 'string') settings.activeQid = j.active;
   if (Array.isArray(j.questionnaires)) settings.questionnaires = j.questionnaires;
   if (typeof j.rows === 'number') settings.backendRows = j.rows;
   if (Array.isArray(j.sheets)) settings.backendSheets = j.sheets;
   if (typeof j.ai === 'boolean' && j.ai !== settings.backendAI) { settings.backendAI = j.ai; updateEngineChip(); }
-  if (j.folderUrl || j.sheet || typeof j.ai === 'boolean') LS.set('gs_settings', settings);
+  if (j.folderUrl || j.sheet || j.sheetUrl || typeof j.ai === 'boolean') LS.set('gs_settings', settings);
 }
 /* ---- Backend self-update: the Apps Script fetches the latest Code.gs from GitHub and re-points its own deployment ---- */
 const newerVersion = (a, b) => { const x = String(a).split('.'), y = String(b).split('.'); for (let i = 0; i < 3; i++) { const p = +x[i] || 0, q = +y[i] || 0; if (p !== q) return p > q; } return false; };
@@ -1526,7 +1530,7 @@ function saveSettings(quiet = false) {
     folderUrl: endpoint === prev.endpoint ? prev.folderUrl || '' : '',
   };
   // What we know about the backend only holds while the endpoint is unchanged
-  if (settings.endpoint === prev.endpoint) { settings.backendAI = prev.backendAI; settings.backendVersion = prev.backendVersion; settings.backendSheet = prev.backendSheet; settings.backendRows = prev.backendRows; settings.backendSheets = prev.backendSheets; }
+  if (settings.endpoint === prev.endpoint) { settings.backendAI = prev.backendAI; settings.backendVersion = prev.backendVersion; settings.backendSheet = prev.backendSheet; settings.backendRows = prev.backendRows; settings.backendSheets = prev.backendSheets; settings.sheetUrl = prev.sheetUrl; settings.scriptUrl = prev.scriptUrl; settings.activeQid = prev.activeQid; settings.questionnaires = prev.questionnaires; settings.pinnedQid = prev.pinnedQid; }
   settings.deviceId = prev.deviceId; settings.adminKeyOk = settings.endpoint === prev.endpoint && settings.adminKey === prev.adminKey ? prev.adminKeyOk : false;
   if (quiet) return; // dry run for the connection test
   LS.set('gs_settings', settings);
@@ -1576,7 +1580,7 @@ function init() {
     e.preventDefault(); const st = $('#testAiStatus'); const saved = settings;
     saveSettings(true); setStatus(st, 'Testing…', '', true);
     try { setStatus(st, await testConnection(), 'ok'); } catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
-    finally { if (settings.endpoint === saved.endpoint) { saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; saved.backendSheet = settings.backendSheet; saved.backendRows = settings.backendRows; saved.backendSheets = settings.backendSheets; } settings = saved; LS.set('gs_settings', saved); updateEngineChip(); }
+    finally { if (settings.endpoint === saved.endpoint) { saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; saved.backendSheet = settings.backendSheet; saved.backendRows = settings.backendRows; saved.backendSheets = settings.backendSheets; saved.sheetUrl = settings.sheetUrl; saved.scriptUrl = settings.scriptUrl; saved.activeQid = settings.activeQid; saved.questionnaires = settings.questionnaires; } settings = saved; LS.set('gs_settings', saved); updateEngineChip(); }
   };
   $('#settingsDlg').addEventListener('close', () => { if ($('#settingsDlg').returnValue === 'save') saveSettings(); });
   $('#cancelSettingsBtn').onclick = $('#closeSettingsX').onclick = () => $('#settingsDlg').close('cancel');
@@ -1642,7 +1646,7 @@ function init() {
   $('#uploadFilesBtn').onclick = uploadMissingFiles;
   $('#testDbBtn').onclick = async e => {
     e.preventDefault(); const st = $('#testDbStatus'); const saved = settings; saveSettings(true); setStatus(st, 'Checking…', '', true);
-    try { const msg = await testDatabase(); saved.folderUrl = settings.folderUrl; saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; saved.backendSheet = settings.backendSheet; saved.backendRows = settings.backendRows; saved.backendSheets = settings.backendSheets; LS.set('gs_settings', saved); st.className = 'status ok'; st.innerHTML = esc(msg) + (settings.folderUrl ? ` · <a href="${esc(settings.folderUrl)}" target="_blank" rel="noopener">open Drive folder</a>` : ''); }
+    try { const msg = await testDatabase(); saved.folderUrl = settings.folderUrl; saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; saved.backendSheet = settings.backendSheet; saved.backendRows = settings.backendRows; saved.backendSheets = settings.backendSheets; saved.sheetUrl = settings.sheetUrl; saved.scriptUrl = settings.scriptUrl; saved.activeQid = settings.activeQid; saved.questionnaires = settings.questionnaires; LS.set('gs_settings', saved); st.className = 'status ok'; st.innerHTML = esc(msg) + (settings.folderUrl ? ` · <a href="${esc(settings.folderUrl)}" target="_blank" rel="noopener">open Drive folder</a>` : ''); }
     catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
     finally { settings = saved; updateEngineChip(); updateSettingsStatus(); }
   };
