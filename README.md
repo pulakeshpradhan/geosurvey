@@ -38,14 +38,18 @@ You need two things: a **free AI key** and a **Google Sheet** to store the answe
 1. Go to https://sheets.new to create a new Google Sheet. Give it a name, e.g. *Village Survey 2026*.
 2. In the Sheet menu click **Extensions → Apps Script**. A code page opens.
 3. Delete everything in that page. Open this file: [backend/Code.gs](backend/Code.gs), click the **copy icon** at the top right of the file, and paste it into the code page.
+   Then click the **gear (Project Settings)** on the left, tick **Show "appsscript.json" manifest file in editor**, go back to the editor, open **appsscript.json** and replace its content with [backend/appsscript.json](backend/appsscript.json).
 4. The line `var ADMIN_TOKEN = 'GeoSurvey';` is the **team key**: whoever has it can see everyone's records (*Sync all*), delete rows and publish the questionnaire. Keep `GeoSurvey` for a trial; for a real project replace it with a password of your choice (keep the quotes). Press **Ctrl+S** to save.
-5. **Allow Drive access:** in the toolbar there is a dropdown that says `myFunction` or `doPost` — change it to **`authorizeDrive`** and click **▶ Run**.
+5. **Switch on the Apps Script API** (lets the backend update itself later): open https://script.google.com/home/usersettings and turn **Google Apps Script API** on.
+6. **Allow access:** in the toolbar there is a dropdown that says `myFunction` or `doPost` — change it to **`authorizeDrive`** and click **▶ Run**.
    Google asks for permission: click **Review permissions → your account → Advanced → Go to (project name) → Allow**.
    This creates a folder **GeoSurvey Photos** in your Google Drive where photos, recordings and transcripts will be saved.
-6. Click **Deploy → New deployment**. Click the gear icon next to *Select type* and choose **Web app**. Set
+7. Click **Deploy → New deployment**. Click the gear icon next to *Select type* and choose **Web app**. Set
    *Execute as:* **Me**, *Who has access:* **Anyone**. Click **Deploy**, then **Copy** the *Web app URL* (it ends with `/exec`).
 
-> Whenever you paste a newer `Code.gs` later, you must also click **Deploy → Manage deployments → ✎ (edit) → Version: New version → Deploy**. Otherwise the old code keeps running.
+> **You never paste Code.gs again.** Whenever a newer version is released, the app asks your backend to update itself (Settings → *Test database* does it immediately; a daily check runs anyway). The backend downloads the latest Code.gs from GitHub, keeps your team key and other settings, saves a new version and re-points the web app — the URL never changes.
+>
+> Already running an older backend (v1.15.3 or earlier)? Do steps 3, 5 and 6 once more, then **Deploy → Manage deployments → ✎ → Version: New version → Deploy** for the last time.
 
 ### Step 3 – Put the key and the URL into the app (1 minute)
 
@@ -68,7 +72,7 @@ Together with the Gemma 4 option below, a phone then needs **nothing at all** in
 If you would rather not give the AI key to every enumerator, put it in the backend once and let Google's **Gemma 4** model do the photo analysis for everyone:
 
 1. In the Apps Script code from Step 2, find `var AI_KEY = '';` and paste your key between the quotes (or add a Script Property named `AI_KEY` under *Project Settings*). Save.
-2. **Deploy → Manage deployments → ✎ → Version: New version → Deploy.**
+2. In the toolbar dropdown pick **`updateBackend`** and click **▶ Run** (publishes the change; no manual deployment needed).
 3. On each phone only the **Database endpoint** is needed (Step 3.3). Settings → **Test database** now says *Gemma 4 enabled for the team*, and *Analyze & fill* works with the provider on **Auto** (or choose *Gemma 4 via database backend* explicitly).
 
 Gemma 4 is served by Google free of charge with rate limits (a few requests per minute per key). It analyses photos and typed transcripts; **voice recordings still need a Gemini key on the phone**. The existing Gemini and OpenRouter options are unchanged and take priority when a key is present.
@@ -117,9 +121,9 @@ Photos come only from the camera (no gallery uploads) and are stamped with time,
 
 | Problem | What to do |
 |---|---|
-| *Analyze & fill* shows an error | Settings → **Test connection**. If it fails, create a new key at https://aistudio.google.com/app/apikey and paste it again. Using Gemma 4 via backend: the message *backend has no AI key* means `AI_KEY` is still empty in Code.gs, or the new version was not deployed. |
-| *Test database* says "old Code.gs" | Paste the latest [backend/Code.gs](backend/Code.gs) again, then **Deploy → Manage deployments → ✎ → New version → Deploy**. |
-| Message about *permission to call DriveApp* | Step 2.5 was skipped: run **authorizeDrive** in Apps Script, allow access, then deploy a new version. Then Records → **Upload files**. |
+| *Analyze & fill* shows an error | Settings → **Test connection**. If it fails, create a new key at https://aistudio.google.com/app/apikey and paste it again. Using Gemma 4 via backend: the message *backend has no AI key* means `AI_KEY` is still empty in Code.gs (after pasting it, run **updateBackend**). |
+| Backend is "older than the app" / "too old to update itself" | Settings → **Test database** normally updates it on the spot. If it says the Apps Script API is off: switch it on at https://script.google.com/home/usersettings. If it says not authorised: paste [backend/appsscript.json](backend/appsscript.json) (Step 2.3) and run **authorizeDrive** once. A backend older than v1.15.4 needs Code.gs pasted one last time (see Step 2). |
+| Message about *permission to call DriveApp* | Step 2.6 was skipped: run **authorizeDrive** in Apps Script and allow access. Then Records → **Upload files**. |
 | Location stays on "Locating…" | Allow location for the site when the phone asks; go outside / near a window. Tap **⟳ Refresh**. |
 | Microphone / camera does not open | Allow microphone and camera for the site in the phone's browser settings. |
 | The app looks old after an update | Close it fully and open it again (or pull down to refresh). |

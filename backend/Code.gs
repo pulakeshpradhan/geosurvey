@@ -1,20 +1,21 @@
 /**
  * GeoSurvey — Google Apps Script backend (free database on Google Sheets + photos on Google Drive)
  *
- * AFTER ANY EDIT OF THIS FILE: Deploy → Manage deployments → ✎ Edit → Version: "New version" → Deploy.
- * (Apps Script keeps serving the OLD code until you create a new version. The app's Settings → "Test database"
- *  shows which version is live and links to the Drive folder.)
- *
- * SETUP (≈2 minutes)
+ * SETUP (≈3 minutes, once)
  *  1. Create a new Google Sheet (sheets.new).
  *  2. Extensions → Apps Script. Delete the default code, paste this file.
+ *     Project Settings (gear) → tick "Show appsscript.json manifest file" → open appsscript.json → paste backend/appsscript.json.
  *  3. Optionally change ADMIN_TOKEN below (the team key; default 'GeoSurvey'). Save.
- *  4. Run the function "authorizeDrive" once (▶ Run) and allow Sheets + Drive access.
- *  5. Deploy → New deployment → Type: "Web app"
+ *  4. Enable the Apps Script API once for your account: https://script.google.com/home/usersettings → "Google Apps Script API" ON.
+ *  5. Run the function "authorizeDrive" once (▶ Run) and allow access (Sheets, Drive, Apps Script projects).
+ *  6. Deploy → New deployment → Type: "Web app"
  *       Execute as: Me            Who has access: Anyone
  *     → Deploy → copy the Web app URL (ends with /exec).
- *  6. Paste that URL into GeoSurvey → Settings → "Database endpoint" and press "Test database".
- *     Use ADMIN_TOKEN in the app's Admin tab to view / delete / export all data.
+ *  7. Paste that URL into GeoSurvey → Settings → "Database endpoint" and press "Test database".
+ *
+ * UPDATES ARE AUTOMATIC from here on: the app (and a daily trigger) call updateBackend, which downloads the latest
+ * Code.gs from GitHub, keeps your ADMIN_TOKEN / AI_KEY / sheet settings, saves it as a new version and re-points this
+ * web app to it. You never paste this file or press "New version" again. (Manual alternative: ▶ Run "updateBackend".)
  *
  * Each submission = one row in "Responses" (new fields become new columns automatically).
  * Stamped photos and interview recordings are saved to the Drive folder PHOTO_FOLDER; links go to "photo_urls" / "audio_urls".
@@ -31,7 +32,7 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.15.3';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.15.4';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -39,12 +40,85 @@ var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does n
  * ONE-TIME DRIVE AUTHORISATION (needed once per script):
  *   In the Apps Script editor choose the function "authorizeDrive" in the toolbar dropdown and click ▶ Run.
  *   Google shows a consent screen → Review permissions → choose your account → Advanced → "Go to … (unsafe)" → Allow.
- *   Then Deploy → Manage deployments → Edit → New version → Deploy. The app's Settings → "Test database" will confirm.
+ *   It also publishes the code as a new version (when the Apps Script API is on). Settings → "Test database" in the app confirms.
  */
 function authorizeDrive() {
   var f = folder_();                       // creates "GeoSurvey Photos" in My Drive if missing
   var ss = ss_(); getSheet_(); configSheet_();
   Logger.log('Drive authorised. Folder: ' + f.getUrl() + ' | Sheet: ' + ss.getUrl());
+  // Publish this code as a new version and install the daily update check (needs the Apps Script API switched on once)
+  try { Logger.log('Publish: ' + JSON.stringify(selfUpdate_(true))); }
+  catch (e) { Logger.log('Could not publish automatically (' + e + '). Switch on https://script.google.com/home/usersettings and run updateBackend, or use Deploy → Manage deployments → New version.'); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Self-update: pull the latest Code.gs from GitHub, keep local settings, publish a new version, re-point the web app */
+/* ------------------------------------------------------------------ */
+var SOURCE_URL = 'https://raw.githubusercontent.com/pulakeshpradhan/geosurvey/main/backend/Code.gs';
+var CONFIG_VARS = ['ADMIN_TOKEN', 'AI_KEY', 'AI_MODEL', 'SHEET_ID', 'SHEET_NAME', 'PHOTO_FOLDER', 'CONFIG_SHEET'];
+
+/** ▶ Run this in the editor: publishes the current code as a new version (no more "New version" clicks) and checks GitHub. */
+function updateBackend() { var r = selfUpdate_(true); Logger.log(JSON.stringify(r)); return r; }
+/** Daily trigger target. */
+function autoUpdateBackend() { try { selfUpdate_(false); } catch (e) { Logger.log('Auto-update: ' + e); } }
+
+function versionOf_(src) { var m = /var BACKEND_VERSION = '([\d.]+)'/.exec(src || ''); return m ? m[1] : '0'; }
+function newer_(a, b) { var x = String(a).split('.'), y = String(b).split('.'); for (var i = 0; i < 3; i++) { var p = +x[i] || 0, q = +y[i] || 0; if (p !== q) return p > q; } return false; }
+function api_(method, path, body) {
+  var opt = { method: method, contentType: 'application/json', headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true };
+  if (body) opt.payload = JSON.stringify(body);
+  var r = UrlFetchApp.fetch('https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId() + path, opt);
+  var j = {}; try { j = JSON.parse(r.getContentText()); } catch (e) {}
+  if (r.getResponseCode() >= 400) {
+    var msg = (j.error && j.error.message) || ('HTTP ' + r.getResponseCode());
+    if (/not enabled the Apps Script API/i.test(msg)) throw new Error('APPS_SCRIPT_API_DISABLED');
+    if (r.getResponseCode() === 403 || /insufficient|scope/i.test(msg)) throw new Error('NOT_AUTHORIZED');
+    throw new Error(msg);
+  }
+  return j;
+}
+/** Copy this project's settings (team key, AI key, sheet names…) into the freshly downloaded source. */
+function carryConfig_(oldSrc, newSrc) {
+  CONFIG_VARS.forEach(function (name) {
+    var m = new RegExp("var " + name + " = '((?:[^'\\\\]|\\\\.)*)';").exec(oldSrc);
+    if (m) newSrc = newSrc.replace(new RegExp("var " + name + " = '(?:[^'\\\\]|\\\\.)*';"), function () { return "var " + name + " = '" + m[1] + "';"; });
+  });
+  return newSrc;
+}
+function ensureUpdateTrigger_() {
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'autoUpdateBackend'; });
+  if (!has) ScriptApp.newTrigger('autoUpdateBackend').timeBased().everyDays(1).atHour(3).create();
+}
+/** publishAnyway: create a version and re-point the deployment even when GitHub has nothing newer (used after a manual paste). */
+function selfUpdate_(publishAnyway) {
+  var lock = LockService.getScriptLock(); if (!lock.tryLock(2000)) return { ok: false, error: 'UPDATE_RUNNING' };
+  try {
+    var dl = UrlFetchApp.fetch(SOURCE_URL, { muteHttpExceptions: true });
+    if (dl.getResponseCode() !== 200) throw new Error('Could not download the latest Code.gs (HTTP ' + dl.getResponseCode() + ')');
+    var latestSrc = dl.getContentText(), latest = versionOf_(latestSrc);
+    var files = api_('get', '/content').files || [], code = null;
+    files.forEach(function (f) { if (f.type === 'SERVER_JS' && /BACKEND_VERSION/.test(f.source || '')) code = f; });
+    if (!code) throw new Error('GeoSurvey code file not found in this project');
+    var current = versionOf_(code.source), changed = false;
+    if (newer_(latest, current)) {
+      code.source = carryConfig_(code.source, latestSrc);
+      api_('put', '/content', { files: files });   // the manifest is left untouched so no re-authorisation is ever needed
+      changed = true; current = latest;
+    } else if (!publishAnyway && !newer_(current, BACKEND_VERSION)) { // nothing new on GitHub and the saved code is already what runs
+      return { ok: true, updated: false, version: current, latest: latest, deployed: BACKEND_VERSION };
+    }
+    changed = changed || newer_(current, BACKEND_VERSION);
+    var ver = api_('post', '/versions', { description: 'GeoSurvey backend v' + current + (changed ? ' (auto-update)' : '') });
+    var deps = api_('get', '/deployments').deployments || [], n = 0;
+    deps.forEach(function (d) {
+      var web = (d.entryPoints || []).some(function (e) { return e.entryPointType === 'WEB_APP'; });
+      if (!web || !d.deploymentConfig || d.deploymentConfig.versionNumber == null) return;   // skip the HEAD (/dev) deployment
+      api_('put', '/deployments/' + d.deploymentId, { deploymentConfig: { scriptId: ScriptApp.getScriptId(), versionNumber: ver.versionNumber, manifestFileName: 'appsscript', description: d.deploymentConfig.description || 'GeoSurvey backend' } });
+      n++;
+    });
+    try { ensureUpdateTrigger_(); } catch (e) {}
+    return { ok: true, updated: changed, version: current, latest: latest, versionNumber: ver.versionNumber, deployments: n };
+  } finally { lock.releaseLock(); }
 }
 var ADMIN_TOKEN = 'GeoSurvey';                     // <-- team key: "Sync all", delete rows, publish the questionnaire. Change it for a real project.
 var SHEET_NAME = 'Responses';
@@ -133,6 +207,14 @@ function doPost(e) {
   var data;
   try { data = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Bad JSON' }); }
   if (data.action === 'ai') { try { return aiProxy_(data); } catch (err) { return json_({ ok: false, error: String(err), version: BACKEND_VERSION }); } } // no lock: slow and independent of the sheet
+  if (data.action === 'selfUpdate') { // any phone may ask the backend to fetch the latest official release; at most once per 10 minutes
+    try {
+      var props = PropertiesService.getScriptProperties(), last = +(props.getProperty('LAST_UPDATE_CHECK') || 0);
+      if (!data.force && Date.now() - last < 600000) return json_({ ok: true, updated: false, throttled: true, version: BACKEND_VERSION });
+      props.setProperty('LAST_UPDATE_CHECK', String(Date.now()));
+      var res = selfUpdate_(false); res.deployed = BACKEND_VERSION; return json_(res);
+    } catch (err) { return json_({ ok: false, error: String(err && err.message || err), version: BACKEND_VERSION }); }
+  }
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
