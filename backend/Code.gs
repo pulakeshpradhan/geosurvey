@@ -21,15 +21,19 @@
  * Duplicate submission ids (offline re-sync) are ignored. Re-deploy after editing this file
  * (Deploy → Manage deployments → Edit → Version: New).
  *
+ * Sync on any phone also pulls every row of the sheet (all enumerators) into its Records tab — read-only, no token
+ * (set TEAM_CAN_VIEW_ALL = false to require the admin token for that). Deleting rows always needs ADMIN_TOKEN.
+ *
  * OPTIONAL — GEMMA 4 PHOTO ANALYSIS FOR THE WHOLE TEAM (enumerators need no key on their phones)
  *  Get one free key at https://aistudio.google.com/app/apikey, paste it into AI_KEY below (or add a Script
  *  Property named AI_KEY under Project Settings), then deploy a NEW VERSION. Phones then pick
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.15.0';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.15.2';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
+var TEAM_CAN_VIEW_ALL = true;                      // every phone with the endpoint sees all records on Sync (read-only); false = admin token only
 
 /**
  * ONE-TIME DRIVE AUTHORISATION (needed once per script):
@@ -183,8 +187,10 @@ function doGet(e) {
     var sh = getSheet_();
     var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
     if (p.action === 'list') {
-      if (!isAdmin_(p.token)) return json_({ ok: false, error: 'Invalid admin token' });
-      if (lastRow < 2) return json_({ ok: true, total: 0, rows: [], sheetUrl: ss_().getUrl() });
+      var admin = isAdmin_(p.token);
+      if (!admin && !TEAM_CAN_VIEW_ALL) return json_({ ok: false, error: p.token ? 'Invalid admin token' : 'TEAM_VIEW_OFF' });
+      var sheetUrl = admin ? ss_().getUrl() : '';
+      if (lastRow < 2) return json_({ ok: true, total: 0, rows: [], sheetUrl: sheetUrl, version: BACKEND_VERSION });
       var limit = Math.min(parseInt(p.limit || 500, 10), 5000);
       var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
       var n = Math.min(limit, lastRow - 1);
@@ -195,7 +201,7 @@ function doGet(e) {
         headers.forEach(function (h, i) { if (h && i !== skip) o[h] = r[i] instanceof Date ? r[i].toISOString() : r[i]; });
         return o;
       });
-      return json_({ ok: true, total: lastRow - 1, rows: rows, sheetUrl: ss_().getUrl() });
+      return json_({ ok: true, total: lastRow - 1, rows: rows, sheetUrl: sheetUrl, version: BACKEND_VERSION });
     }
     return json_({ ok: true, total: Math.max(0, lastRow - 1) });
   } catch (err) {

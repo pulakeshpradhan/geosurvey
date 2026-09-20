@@ -1,5 +1,5 @@
 /* GeoSurvey — Analysis tab: assembles data, runs stats-worker.js, renders charts/tables and an interpretation report.
- * Depends on app.js globals (CONSTRUCTS, STRUCTURAL_MODEL, ALL_FIELDS, getRecords, adminRows, LS, toast, esc, download). */
+ * Depends on app.js globals (CONSTRUCTS, STRUCTURAL_MODEL, ALL_FIELDS, getRecords, cloudRows, LS, toast, esc, download). */
 'use strict';
 
 const Analysis = (() => {
@@ -95,7 +95,7 @@ const Analysis = (() => {
 
   /* ---------- data assembly & worker ---------- */
   function dataset() {
-    const src = $('#anSource').value; const cloud = typeof adminRows !== 'undefined' && adminRows.length ? adminRows : null;
+    const src = $('#anSource').value; const cloud = typeof cloudRows === 'function' && cloudRows().length ? cloudRows() : null;
     let rows = src === 'cloud' ? (cloud || []) : src === 'device' ? getRecords() : (cloud || getRecords());
     const srcLabel = src === 'cloud' || (src === 'auto' && cloud) ? 'cloud (Google Sheet)' : 'this device';
     const sample = settings.sampleTools && $('#anIncludeSample').checked ? LS.get('gs_sample', []) : [];
@@ -107,7 +107,7 @@ const Analysis = (() => {
     if (running) { queued = true; return; }
     const ds = dataset();
     setStatus($('#anStatus'), `Analyzing ${ds.rows.length} records (${ds.nReal} from ${ds.srcLabel}${ds.nSample ? ` + ${ds.nSample} sample` : ''})…`, '', true);
-    if (!worker) { worker = new Worker('stats-worker.js?v=1.15.1'); worker.onmessage = onResult; worker.onerror = e => { running = false; setStatus($('#anStatus'), 'Analysis error: ' + e.message, 'err'); }; }
+    if (!worker) { worker = new Worker('stats-worker.js?v=1.15.2'); worker.onmessage = onResult; worker.onerror = e => { running = false; setStatus($('#anStatus'), 'Analysis error: ' + e.message, 'err'); }; }
     running = true;
     const schema = { constructs: CONSTRUCTS, model: STRUCTURAL_MODEL, fields: ALL_FIELDS.map(({ k, label, type, options }) => ({ k, label, type, options })) };
     worker.postMessage({ records: ds.rows.map(({ photo_thumb, ...r }) => r), schema, meta: ds });

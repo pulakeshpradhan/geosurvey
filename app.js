@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.1';
+const APP_VERSION = '1.15.2';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -276,6 +276,8 @@ const PhotoDB = {
   async get(id) { const r = await this.tx('readonly', st => st.get(id)); return r ? r.photos : []; },
   async getAudio(id) { const r = await this.tx('readonly', st => st.get(id)); return r ? (r.audio || []) : []; },
   del(id) { return this.tx('readwrite', st => st.delete(id)); },
+  putKV(id, data) { return this.tx('readwrite', st => st.put({ id, ...data })); },
+  getKV(id) { return this.tx('readonly', st => st.get(id)); },
 };
 
 /* ------------------------------------------------------------------ */
@@ -1013,7 +1015,7 @@ async function submitForm() {
     clearForm(); lastEngine = '';
     toast('Saved on device — syncing…');
   } finally { btn.disabled = false; }
-  await syncPending();
+  await syncPending(false);
 }
 const REQUIRED_BACKEND = 1.14;
 const DRIVE_HELP = 'Drive is not authorised for the backend. In the Apps Script editor pick the function "authorizeDrive", click Run and allow access, then Deploy > Manage deployments > Edit > New version. Then retry.';
@@ -1089,12 +1091,15 @@ async function uploadMissingFiles() {
 }
 const filesMissing = r => ((r.photo_count > 0 && !(r.photo_urls || '').includes('drive.google.com')) || (r.audio_count > 0 && !(r.audio_urls || '').includes('drive.google.com')) || (r.interview_transcript && !(r.transcript_url || '').includes('drive.google.com')));
 let syncing = false;
-async function syncPending() {
+/** manual = pressed by the user (always refreshes the team list and reports); automatic runs stay quiet. */
+async function syncPending(manual = true) {
   if (syncing) return;
   const records = getRecords(); const pending = records.filter(r => r.status !== 'synced');
-  if (!pending.length) return renderLocalTable();
-  if (!settings.endpoint) { renderLocalTable(); return toast(`${pending.length} record(s) kept on device — set a database endpoint in Settings to sync.`); }
-  if (!navigator.onLine) { renderLocalTable(); return toast('Offline — will sync when the connection returns.'); }
+  if (!settings.endpoint) { renderLocalTable(); if (pending.length) toast(`${pending.length} record(s) kept on device — set a database endpoint in Settings to sync.`); return; }
+  if (!navigator.onLine) { renderLocalTable(); if (manual) toast('Offline — will sync when the connection returns.'); return; }
+  // Automatic runs (after Submit, on reconnect) re-pull the whole sheet at most every 10 minutes to spare mobile data
+  const wantList = manual || Date.now() - teamRowsAt > 600000;
+  if (!pending.length && !wantList) return renderLocalTable();
   syncing = true; $('#syncBtn').disabled = true;
   let ok = 0, fail = 0;
   for (const rec of pending) {
@@ -1102,26 +1107,62 @@ async function syncPending() {
     catch (e) { rec.status = 'failed'; rec.error = e.message; fail++; }
     saveRecords(records);
   }
-  syncing = false; $('#syncBtn').disabled = false;
-  renderLocalTable();
   if (ok) toast(`${ok} record(s) synced to the database`, 'ok');
   if (fail) toast(`${fail} record(s) failed to sync — check endpoint / connection`, 'err');
+  if (wantList) {
+    try { const n = await refreshTeamRows(); if (manual) toast(`${n} record(s) in the team database`, 'ok'); }
+    catch (e) { if (manual) toast('Could not load the team records: ' + e.message, 'err'); }
+  }
+  syncing = false; $('#syncBtn').disabled = false; renderLocalTable();
 }
+
+/* Every row of the Google Sheet (all enumerators), pulled on Sync and cached in IndexedDB for offline viewing. */
+let teamRows = [], teamRowsAt = 0;
+const TEAM_CACHE_KEY = '__team_rows';
+async function loadTeamCache() {
+  try { const c = await PhotoDB.getKV(TEAM_CACHE_KEY); if (c && c.endpoint === settings.endpoint) { teamRows = c.rows || []; teamRowsAt = c.at || 0; } } catch {}
+}
+async function refreshTeamRows() {
+  if (!settings.endpoint) throw new Error('No database endpoint configured (Settings)');
+  const q = new URLSearchParams({ action: 'list', limit: 5000 }); if (adminToken()) q.set('token', adminToken());
+  const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q);
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) throw new Error(j.error === 'TEAM_VIEW_OFF' ? 'the admin has limited the full list to the admin token (Edit → Collected data)' : j.error === 'Invalid admin token' ? 'the backend is an old Code.gs — deploy the latest version to let the team see all records' : j.error || `HTTP ${r.status}`);
+  teamRows = j.rows || []; teamRowsAt = Date.now();
+  PhotoDB.putKV(TEAM_CACHE_KEY, { rows: teamRows, at: teamRowsAt, endpoint: settings.endpoint }).catch(() => {});
+  if (typeof Analysis !== 'undefined') Analysis.schedule();
+  return teamRows.length;
+}
+/** Device records first (they carry thumbnails and sync state), then everything else the team submitted. */
+function allRecords() {
+  const local = getRecords(); const seen = new Set(local.map(r => r.id));
+  return [...local, ...teamRows.filter(r => r.id && !seen.has(String(r.id))).map(r => ({ ...r, status: 'database' }))];
+}
+/** What the Analysis tab treats as the cloud dataset: the admin listing when connected, else the team listing. */
+function cloudRows() { return adminRows.length ? adminRows : teamRows; }
 
 const TABLE_COLS = ['submitted_at', 'head_name', 'village', 'district', 'postcode', 'house_type', 'monthly_income', 'household_size', 'latitude', 'longitude', 'surveyor'];
 function renderLocalTable() {
-  const records = getRecords();
-  const synced = records.filter(r => r.status === 'synced').length;
-  $('#localSummary').textContent = records.length ? `${records.length} record(s) · ${synced} synced · ${records.length - synced} pending or failed. Stamped photos are kept on this device and uploaded to Drive on sync.` : 'No submissions on this device yet.';
+  const local = getRecords(); const records = allRecords();
+  const synced = local.filter(r => r.status === 'synced').length; const team = records.length - local.length;
+  const parts = [];
+  if (local.length) parts.push(`${local.length} on this device (${synced} synced, ${local.length - synced} pending or failed)`);
+  if (teamRowsAt) parts.push(`${team} more from the team database (${teamRows.length} rows in total, as of ${fmtDate(new Date(teamRowsAt).toISOString())})`);
+  else if (settings.endpoint) parts.push('press Sync to load every record submitted by the team');
+  $('#localSummary').textContent = parts.length ? parts.join(' · ') + '.' : 'No submissions on this device yet.';
   const link = $('#driveFolderLink'); if (link) { link.hidden = !settings.folderUrl; link.href = settings.folderUrl || '#'; }
+  const driveLinks = r => `${String(r.photo_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Photo ${i + 1}">📷</a>`).join('')}${String(r.audio_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Audio ${i + 1}">🎙</a>`).join('')}${(r.transcript_url || '').includes('drive') ? `<a href="${esc(r.transcript_url)}" target="_blank" rel="noopener" title="Transcript">📝</a>` : ''}`;
   const filesCell = r => {
+    if (r.status === 'database') return driveLinks(r) || '<span class="dim">—</span>';
     if (!(r.photo_count || r.audio_count || r.interview_transcript)) return '<span class="dim">—</span>';
     if (r.status !== 'synced') return '<span class="pill pending">on device</span>';
     if (filesMissing(r)) return `<span class="pill failed" title="${esc(r.files_error || 'Files were not stored in Drive')}">not in Drive</span> <button class="link-btn" data-attach="${r.id}">Upload files</button>${r.files_error === DRIVE_HELP ? '<div class="dim" style="white-space:normal;max-width:320px;font-size:11.5px">Drive not authorised: run <code>authorizeDrive</code> in Apps Script, deploy a new version, then Upload files.</div>' : ''}`;
-    return `<span class="pill synced">in Drive</span> ${String(r.photo_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Photo ${i + 1}">📷</a>`).join('')}${String(r.audio_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Audio ${i + 1}">🎙</a>`).join('')}${(r.transcript_url || '').includes('drive') ? `<a href="${esc(r.transcript_url)}" target="_blank" rel="noopener" title="Transcript">📝</a>` : ''}`;
+    return `<span class="pill synced">in Drive</span> ${driveLinks(r)}`;
   };
-  $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th><th>Files in Drive</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>` +
-    records.map(r => `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`).join('') + '</tbody>' : '';
+  const row = r => r.status === 'database'
+    ? `<tr class="team"><td><span class="pill database" title="Submitted by the team; stored in the Google Sheet">database</span></td><td>${+r.photo_count ? `<span class="dim">${r.photo_count} 📷</span>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td></td></tr>`
+    : `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`;
+  $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th><th>Files in Drive</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>${records.map(row).join('')}</tbody>` : '';
   $$('#localTable [data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Delete this record (and its photos) from the device?')) return;
     await PhotoDB.del(b.dataset.del); saveRecords(getRecords().filter(r => r.id !== b.dataset.del)); renderLocalTable();
@@ -1256,7 +1297,7 @@ function showView(id) {
   $('#actionBar').hidden = id !== 'formView';
   $('#pdfBtn').hidden = id !== 'formView';
   $('#editBtn').classList.toggle('active', id === 'editView');
-  if (id === 'responsesView') renderLocalTable();
+  if (id === 'responsesView') { renderLocalTable(); if (settings.endpoint && navigator.onLine && !syncing && Date.now() - teamRowsAt > 60000) refreshTeamRows().then(renderLocalTable).catch(() => {}); }
   if (id === 'analysisView' && typeof Analysis !== 'undefined') Analysis.open();
   if (id === 'editView') { if (typeof Designer !== 'undefined') Designer.open(); if (adminToken() && $('#adminPanel').hidden) adminConnect(); }
 }
@@ -1266,6 +1307,7 @@ function init() {
   if (settings.surveyor) setValue('surveyor', settings.surveyor);
   resolveEndpoint();
   restoreDraft(); updateProgress(); updatePendingBadge(); updateEngineChip(); detectChromeAI();
+  loadTeamCache().then(() => { if (!$('#responsesView').hidden) renderLocalTable(); if (typeof Analysis !== 'undefined' && teamRows.length) Analysis.schedule(); });
   autoLocate();
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#formView').hidden && (!lastFix || Date.now() - lastFix.time > 300000)) autoLocate(); });
 
@@ -1313,7 +1355,7 @@ function init() {
   $('#transcriptClear').onclick = () => { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; updateAnalyzeBtn(); };
   $('#submitBtn').onclick = submitForm;
   $('#resetBtn').onclick = () => { if (confirm('Clear the form?')) clearForm(); };
-  $('#syncBtn').onclick = syncPending;
+  $('#syncBtn').onclick = () => syncPending(true);
   $('#uploadFilesBtn').onclick = uploadMissingFiles;
   $('#testDbBtn').onclick = async e => {
     e.preventDefault(); const st = $('#testDbStatus'); const saved = settings; saveSettings(true); setStatus(st, 'Checking…', '', true);
@@ -1321,10 +1363,10 @@ function init() {
     catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
     finally { settings = saved; updateEngineChip(); }
   };
-  $('#exportCsvBtn').onclick = () => Exports.csv(getRecords());
-  $('#exportJsonBtn').onclick = () => Exports.json(getRecords());
-  $('#exportSpssBtn').onclick = () => Exports.spss(getRecords());
-  $('#exportKmzBtn').onclick = () => Exports.kmz(getRecords());
+  $('#exportCsvBtn').onclick = () => Exports.csv(allRecords());
+  $('#exportJsonBtn').onclick = () => Exports.json(allRecords());
+  $('#exportSpssBtn').onclick = () => Exports.spss(allRecords());
+  $('#exportKmzBtn').onclick = () => Exports.kmz(allRecords());
   $('#clearLocalBtn').onclick = async () => {
     const synced = getRecords().filter(r => r.status === 'synced');
     if (!synced.length) return toast('No synced records to remove');
@@ -1342,7 +1384,7 @@ function init() {
   $('#adminLogoutBtn').onclick = () => { sessionStorage.removeItem('gs_admin'); $('#adminPanel').hidden = true; $('#adminLogin').hidden = false; $('#adminToken').value = ''; setStatus($('#adminStatus'), ''); };
 
   const offline = () => { $('#offlineBar').hidden = navigator.onLine; updateEngineChip(); };
-  window.addEventListener('online', () => { offline(); syncPending(); });
+  window.addEventListener('online', () => { offline(); syncPending(false); });
   window.addEventListener('offline', offline);
   offline();
 

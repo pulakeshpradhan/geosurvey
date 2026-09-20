@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.15.1">
+  <link rel="stylesheet" href="styles.css?v=1.15.2">
 </head>
 <body>
   <header class="topbar">
@@ -99,13 +99,13 @@
       </div>
     </section>
 
-    <!-- ================= RECORDS VIEW (device) ================= -->
+    <!-- ================= RECORDS VIEW (device + team database) ================= -->
     <section id="responsesView" class="view" hidden>
       <div class="card">
         <div class="card-head">
-          <div><h2>Records on this device</h2><p class="sub" id="localSummary"></p></div>
+          <div><h2>Records</h2><p class="sub" id="localSummary"></p></div>
           <div class="btn-row">
-            <button id="syncBtn" class="btn btn-primary btn-sm">Sync pending</button>
+            <button id="syncBtn" class="btn btn-primary btn-sm" title="Send pending records, then load every record submitted by the team">Sync</button>
             <button id="uploadFilesBtn" class="btn btn-outline btn-sm" title="Re-upload photos, recordings and transcripts of synced records that are not yet in Drive">Upload files</button>
             <a id="driveFolderLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" hidden>Open Drive folder</a>
             <button id="exportCsvBtn" class="btn btn-outline btn-sm">Export CSV</button>
@@ -126,9 +126,9 @@
           <div><h2>Automated analysis</h2><p class="sub" id="anSummary">Descriptive → inferential → reliability → EFA → CFA → SEM → mediation, moderation and higher-order constructs. Re-runs automatically whenever data changes.</p></div>
           <div class="btn-row">
             <select id="anSource" class="input input-sm">
-              <option value="auto">Source: auto (cloud if admin connected, else device)</option>
+              <option value="auto">Source: auto (team database once synced, else device)</option>
               <option value="device">Source: device records</option>
-              <option value="cloud">Source: cloud (admin)</option>
+              <option value="cloud">Source: team database (Google Sheet)</option>
             </select>
             <span id="anSampleTools" class="btn-row" hidden>
               <label class="check-inline"><input type="checkbox" id="anIncludeSample" checked> include sample data</label>
@@ -321,12 +321,12 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.15.1"></script>
-  <script src="app.js?v=1.15.1"></script>
-  <script src="sav.js?v=1.15.1"></script>
-  <script src="exports.js?v=1.15.1"></script>
-  <script src="analysis.js?v=1.15.1"></script>
-  <script src="pdf.js?v=1.15.1"></script>
-  <script src="designer.js?v=1.15.1"></script>
+  <script src="config.js?v=1.15.2"></script>
+  <script src="app.js?v=1.15.2"></script>
+  <script src="sav.js?v=1.15.2"></script>
+  <script src="exports.js?v=1.15.2"></script>
+  <script src="analysis.js?v=1.15.2"></script>
+  <script src="pdf.js?v=1.15.2"></script>
+  <script src="designer.js?v=1.15.2"></script>
 </body>
 </html>

@@ -107,9 +107,9 @@ Photos come only from the camera (no gallery uploads) and are stamped with time,
 
 ## Seeing the results
 
-- **Records** tab – what this phone collected; download as **CSV, JSON, SPSS (.sav)** or **KMZ** (map file for Google Earth).
-- **Analysis** tab – automatic statistics on all data (tables, charts, reliability, factor analysis, SEM…) with a plain-language report. Press **Download report** for a file you can share.
-- **Edit → Collected data** – enter the password from Step 2 to see all households from all phones, search, delete a wrong entry, or export everything.
+- **Records** tab – press **Sync**: pending records go up, and **every record submitted by the whole team** comes down (rows marked *database* are from other phones; they stay visible offline). Download all of it as **CSV, JSON, SPSS (.sav)** or **KMZ** (map file for Google Earth).
+- **Analysis** tab – automatic statistics on the team data once synced (tables, charts, reliability, factor analysis, SEM…) with a plain-language report. Press **Download report** for a file you can share.
+- **Edit → Collected data** – enter the password from Step 2 to delete a wrong entry or publish the questionnaire. (To restrict the full record list to the password as well, set `TEAM_CAN_VIEW_ALL = false` in Code.gs.)
 
 ---
 
