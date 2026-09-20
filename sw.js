@@ -1,6 +1,6 @@
 /* GeoSurvey service worker — caches the app shell so the form opens offline.
  * CACHE is bumped on every release; shell requests always revalidate with the network first. */
-const VERSION = '1.16.3';
+const VERSION = '1.16.4';
 const CACHE = 'geosurvey-v' + VERSION;
 const SHELL = ['./', './index.html', './icon.svg', './manifest.json', ...['styles.css', 'config.js', 'qr.js', 'app.js', 'sav.js', 'exports.js', 'analysis.js', 'pdf.js', 'designer.js', 'stats-worker.js'].map(f => `./${f}?v=${VERSION}`)];
 

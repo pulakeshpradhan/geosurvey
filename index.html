@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.16.3">
+  <link rel="stylesheet" href="styles.css?v=1.16.4">
 </head>
 <body>
   <header class="topbar">
@@ -233,11 +233,9 @@
         <div class="set-status">
           <div class="stat-tile" id="stDb"><i class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg></i><div><b>Database</b><small id="stDbText">Not connected</small></div></div>
           <div class="stat-tile" id="stAi"><i class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg></i><div><b>AI photo-fill</b><small id="stAiText">Not set up</small></div></div>
-          <div class="set-quick">
-            <button type="button" id="quickQr" class="qbtn" title="Team QR code — scan on a phone to connect it" aria-label="Team QR code"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M21 14v1M21 18v3h-3M14 21h1"/></svg></button>
-            <button type="button" id="teamLinkBtn" class="qbtn" title="Copy the team link" aria-label="Copy team link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></button>
-            <a class="qbtn" href="guide/" target="_blank" rel="noopener" title="Step-by-step setup guide" aria-label="Setup guide"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></a>
-          </div>
+          <button type="button" id="quickQr" class="stat-tile action" title="Scan on a phone to connect it to this database"><i class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M21 14v1M21 18v3h-3M14 21h1"/></svg></i><div><b>Team QR</b><small>Scan to connect a phone</small></div></button>
+          <button type="button" id="teamLinkBtn" class="stat-tile action" title="Copy the team link to share on WhatsApp or e-mail"><i class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></i><div><b>Copy link</b><small>Team link to share</small></div></button>
+          <a class="stat-tile action" href="guide/" target="_blank" rel="noopener" title="Step-by-step setup slides"><i class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></i><div><b>Setup guide</b><small>Step-by-step slides</small></div></a>
         </div>
         <!-- Team & database -->
         <section class="set-card">
@@ -283,6 +281,12 @@
             <label class="radio"><input type="radio" name="engine" value="chrome"><i></i><span><b>Chrome built-in AI</b><small>Desktop Chrome only, no key</small></span><em class="rstat" data-stat="chrome"></em></label>
           </div>
 
+          <div class="set-grid" data-for="chrome">
+            <div class="set-field"><span>Built-in model <em>Gemini Nano, about 2 GB, downloaded once</em></span>
+              <div class="btn-row"><button type="button" id="chromeDlBtn" class="btn btn-outline btn-sm">Download model now</button><span id="chromeDlStatus" class="status" style="margin:0"></span></div>
+              <small>Status in Chrome: <code>chrome://components</code> → "Optimization Guide On Device Model" (0.0.0.0 = not downloaded; press "Check for update"), or <code>chrome://on-device-internals</code>. Desktop Chrome only.</small>
+            </div>
+          </div>
           <div class="set-grid" data-for="gemma auto">
             <label class="set-field"><span>Gemma model</span>
               <select id="setGemmaModel" class="input"><option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it · fast (default)</option><option value="gemma-4-31b-it">gemma-4-31b-it · most capable</option></select>
@@ -409,13 +413,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.16.3"></script>
-  <script src="qr.js?v=1.16.3"></script>
-  <script src="app.js?v=1.16.3"></script>
-  <script src="sav.js?v=1.16.3"></script>
-  <script src="exports.js?v=1.16.3"></script>
-  <script src="analysis.js?v=1.16.3"></script>
-  <script src="pdf.js?v=1.16.3"></script>
-  <script src="designer.js?v=1.16.3"></script>
+  <script src="config.js?v=1.16.4"></script>
+  <script src="qr.js?v=1.16.4"></script>
+  <script src="app.js?v=1.16.4"></script>
+  <script src="sav.js?v=1.16.4"></script>
+  <script src="exports.js?v=1.16.4"></script>
+  <script src="analysis.js?v=1.16.4"></script>
+  <script src="pdf.js?v=1.16.4"></script>
+  <script src="designer.js?v=1.16.4"></script>
 </body>
 </html>

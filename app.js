@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.16.3';
+const APP_VERSION = '1.16.4';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -838,11 +838,24 @@ function updateSettingsStatus() {
     if (dbRowsAt) bits.push(`${dbRows.length} ${dbScope === 'all' ? 'team' : 'of your'} record${dbRows.length === 1 ? '' : 's'} in the database`);
     dbCls = settings.backendVersion ? (pending ? 'warn' : 'ok') : 'warn'; dbTxt = bits.join(' · ');
   }
-  db.className = 'stat-tile ' + dbCls; $('#stDbText').textContent = dbTxt;
+  db.className = 'stat-tile clickable ' + dbCls; $('#stDbText').textContent = dbTxt + (settings.endpoint ? ' · tap to test' : '');
   const ready = engineReady();
-  ai.className = 'stat-tile ' + (ready ? 'ok' : 'warn');
-  $('#stAiText').textContent = ready ? `Ready · ${engineLabel()}` : 'Not set up — pick a provider below and add a key, or ask your admin to enable Gemma 4 on the backend';
+  ai.className = 'stat-tile clickable ' + (ready ? 'ok' : 'warn');
+  $('#stAiText').textContent = ready ? `Ready · ${engineLabel()} · tap to test` : 'Not set up — tap to get a free key, or ask your admin to enable Gemma 4 on the backend';
   $('#quickQr').disabled = $('#teamLinkBtn').disabled = !(settings.endpoint || TEAM_ENDPOINT);
+}
+/** Tile actions: Database → test (or focus the URL field); AI → test when ready, otherwise guide to a key. */
+function tileDbAction() {
+  if (!$('#setEndpoint').value.trim() && !TEAM_ENDPOINT) { $('#setEndpoint').focus(); $('#setEndpoint').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  $('#testDbBtn').click(); $('#testDbStatus').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function tileAiAction() {
+  if (engineReady()) { $('#testAiBtn').click(); $('#testAiStatus').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  const gemmaPossible = !!(settings.endpoint || TEAM_ENDPOINT) && settings.backendAI;
+  const pick = gemmaPossible ? 'gemma' : 'gemini';
+  $$('input[name="engine"]').forEach(r => r.checked = r.value === pick); updateProviderUI();
+  $('#engineRadios').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (pick === 'gemini') { setTimeout(() => $('#setKey').focus(), 350); window.open('https://aistudio.google.com/app/apikey', '_blank', 'noopener'); }
 }
 
 function promptFor(fields, ctx, sectionTitle, transcript = '', nAudio = 0) {
@@ -1513,6 +1526,18 @@ function init() {
   $$('input[name="engine"]').forEach(r => r.onchange = updateProviderUI);
   ['setKey', 'setOrKey', 'setEndpoint'].forEach(id => $('#' + id).addEventListener('input', updateProviderUI));
   $$('.pw .eye').forEach(b => b.onclick = () => { const i = b.previousElementSibling; i.type = i.type === 'password' ? 'text' : 'password'; b.textContent = i.type === 'password' ? '👁' : '🙈'; });
+  $('#chromeDlBtn').onclick = async () => {
+    const st = $('#chromeDlStatus'), btn = $('#chromeDlBtn');
+    if (!('LanguageModel' in self)) return setStatus(st, 'Not available in this browser — needs recent desktop Chrome with the Prompt API', 'err');
+    btn.disabled = true; setStatus(st, 'Checking…', '', true);
+    try {
+      const a = await LanguageModel.availability({ expectedInputs: [{ type: 'image' }, { type: 'text' }] });
+      if (a === 'unavailable') throw new Error('this Chrome cannot run the model (needs desktop Chrome, ~22 GB free disk and a capable GPU)');
+      chromeSession = await LanguageModel.create({ expectedInputs: [{ type: 'image' }, { type: 'text' }], monitor(m) { m.addEventListener('downloadprogress', e => setStatus(st, `Downloading… ${Math.round((e.loaded / (e.total || 1)) * 100)}%`, '', true)); } });
+      chromeAI = 'available'; setStatus(st, 'Model ready — Chrome built-in AI can be used offline now', 'ok'); updateEngineChip();
+    } catch (e) { setStatus(st, 'Could not download: ' + e.message, 'err'); }
+    finally { btn.disabled = false; }
+  };
   // Enter inside a field must not submit the dialog (the first submit button is Cancel): run the matching test instead
   $('#settingsDlg form').addEventListener('keydown', e => {
     if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
@@ -1531,6 +1556,7 @@ function init() {
   if (!LS.get('gs_welcomed', null)) setTimeout(() => { if (!$('#settingsDlg').open) welcome.showModal(); }, 400);
   $('#qrBtn').onclick = openTeamQr;
   $('#quickQr').onclick = openTeamQr;
+  $('#stDb').onclick = tileDbAction; $('#stAi').onclick = tileAiAction;
   $('#qrClose').onclick = () => $('#qrDlg').close();
   $('#qrSettings').onclick = () => { $('#qrDlg').close(); openSettings(); };
   $('#qrCopy').onclick = async () => { const link = teamLink(); try { await navigator.clipboard.writeText(link); toast('Team link copied', 'ok'); } catch { prompt('Copy this link:', link); } };
