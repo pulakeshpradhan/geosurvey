@@ -67,8 +67,8 @@ The backend can hold any number of questionnaires. Each one gets its **own dedic
 
 - **Edit → questionnaire bar:** pick which questionnaire to edit; **New** creates another one (you name it, its tab is created on first publish); **Make default** chooses the one every phone follows; **Delete** removes a questionnaire — a tab that holds records is always kept, only an empty tab is removed. Tabs are never renamed, because the link between a questionnaire and its data must stay intact.
 - **Publishing an update** to a questionnaire that already has records asks where new responses go: *continue in the current sheet* (wording tweaks, a few added questions) or *start a new sheet for this version* (questions, options or scales changed). Earlier sheets keep their data.
-- **Phones** follow the default questionnaire. A phone can be pointed to another one with its project file or by applying it in Edit; it then stays on it until the admin changes the default or deletes it. Records queued on a phone always land in the tab of the questionnaire they were collected with.
-- **Data** (header button) has a tab selector to view, export or delete rows from any response sheet.
+- **Phones** follow the default questionnaire. A phone can be pointed to another one with its project file or by applying it in Edit; it then stays on it until the admin changes the default or deletes it. Records queued on a phone always land in the tab of the questionnaire they were collected with, and only the phone that submitted a record (or the admin) can attach files to it.
+- **Data** (header button) has a tab selector to view, export or delete rows from any response sheet. *Disconnect* there removes the team key from that phone.
 
 ### Project file (`.geosurvey`)
 

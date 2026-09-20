@@ -31,7 +31,7 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.17.3';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.18.0';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -387,6 +387,9 @@ function attachFiles_(data) {
   var rid = String(data.id || ''), hit = rid ? findRow_(rid) : null;
   if (!hit) return json_({ ok: false, error: 'Record not found in the sheet — sync it first' });
   var sh = hit.sh, row = hit.row, out = {};
+  // Only the phone that submitted the row (or the admin) may add files to it
+  var hdr = headers_(sh), dc = hdr.indexOf('device_id');
+  if (dc >= 0 && !isAdmin_(data.token)) { var owner = String(sh.getRange(row, dc + 1).getValue() || ''); if (owner && owner !== String(data.device_id || '')) return json_({ ok: false, error: 'This record was submitted from another phone', version: BACKEND_VERSION }); }
   if ((data.photos || []).length) out.photo_urls = savePhotos_(rid, data.photos, 'photo').join('\n');
   if ((data.audio || []).length) out.audio_urls = savePhotos_(rid, data.audio, 'audio').join('\n');
   if (data.interview_transcript && String(data.interview_transcript).trim()) {

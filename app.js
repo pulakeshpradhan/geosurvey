@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.17.5';
+const APP_VERSION = '1.18.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1209,7 +1209,7 @@ async function sendRecord(rec) {
 }
 /** Re-upload a record's photos / audio / transcript to Drive (e.g. after the backend was updated). */
 async function attachFiles(rec) {
-  const body = { action: 'attach', id: rec.id, photos: await PhotoDB.get(rec.id), audio: await PhotoDB.getAudio(rec.id), interview_transcript: rec.interview_transcript || '' };
+  const body = { action: 'attach', id: rec.id, device_id: settings.deviceId, photos: await PhotoDB.get(rec.id), audio: await PhotoDB.getAudio(rec.id), interview_transcript: rec.interview_transcript || '' };
   if (!body.photos.length && !body.audio.length && !body.interview_transcript) throw new Error('No files kept on this device for that record');
   const r = await fetch(settings.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
@@ -1291,7 +1291,7 @@ async function verifyTeamKey() {
   const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q).catch(() => null);
   const j = r ? await r.json().catch(() => ({})) : {};
   if (j.ok) { settings.adminKeyOk = true; LS.set('gs_settings', settings); return true; }
-  if (j.error === 'Invalid admin token') { settings.adminKey = ''; settings.adminKeyOk = false; LS.set('gs_settings', settings); sessionStorage.removeItem('gs_admin'); toast('Team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)', 'err'); }
+  if (j.error === 'Invalid admin token') { rejectAdminKey(); toast('Team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)', 'err'); }
   else toast('Could not check the team key: ' + (j.error || 'no answer from the backend'), 'err');
   return false;
 }
@@ -1312,7 +1312,7 @@ async function refreshDbRows() {
   const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q);
   const j = await r.json().catch(() => ({}));
   if (!j.ok) {
-    if (j.error === 'Invalid admin token') { settings.adminKey = ''; settings.adminKeyOk = false; LS.set('gs_settings', settings); sessionStorage.removeItem('gs_admin'); throw new Error('team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)'); }
+    if (j.error === 'Invalid admin token') { rejectAdminKey(); throw new Error('team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)'); }
     if (!j.version) throw new Error('Backend is older than this app — ' + PASTE_ONCE);
     throw new Error(j.error || `HTTP ${r.status}`);
   }
@@ -1336,7 +1336,9 @@ function renderLocalTable() {
   const waiting = local.filter(r => r.status !== 'synced').length; const kept = local.length - waiting;
   const parts = [];
   if (waiting) parts.push(`${waiting} waiting on this phone to be sent`);
-  if (kept) parts.push(`${kept} sent but files not yet in Drive (kept on the phone until "Upload files" succeeds)`);
+  const keptFiles = local.filter(r => r.status === 'synced' && filesMissing(r)).length, keptOther = kept - keptFiles;
+  if (keptFiles) parts.push(`${keptFiles} sent but files not yet in Drive (kept on the phone until "Upload files" succeeds)`);
+  if (keptOther) parts.push(`${keptOther} sent — removed from the phone after the next Sync`);
   if (dbRowsAt) parts.push(`${dbRows.length} ${dbScope === 'all' ? 'record(s) of the whole team' : 'of your record(s)'} in the database${settings.backendSheet ? ` (sheet "${settings.backendSheet}")` : ''}, as of ${fmtDate(new Date(dbRowsAt).toISOString())}${dbScope === 'mine' ? ' — Sync all shows everyone\'s with the team key' : ''}`);
   else if (settings.endpoint) parts.push('press Sync to read your records from the database' + (adminToken() ? '' : '; Sync all shows the whole team\'s with the team key'));
   $('#localSummary').textContent = parts.length ? parts.join(' · ') + '.' : 'No submissions on this device yet.';
@@ -1354,25 +1356,34 @@ function renderLocalTable() {
     ? `<tr class="team"><td><span class="pill database" title="Stored in the Google Sheet">database</span></td><td>${+r.photo_count ? `<span class="dim">${r.photo_count} 📷</span>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${pdfBtn(r)}</td></tr>`
     : `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${pdfBtn(r)}${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`;
   $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th><th>Files in Drive</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>${records.map(row).join('')}</tbody>` : '';
-  $$('#localTable [data-del]').forEach(b => b.onclick = async () => {
+  // Phone layout: one card per record (the wide table is hidden by CSS below 640 px)
+  const card = r => { const db = r.status === 'database'; return `<div class="rec-card${db ? ' team' : ''}">
+    <div class="rc-top"><span class="pill ${db ? 'database' : r.status}" title="${esc(r.error || '')}">${db ? 'database' : r.status}</span><span class="rc-date">${esc(fmtDate(r.submitted_at))}</span></div>
+    <div class="rc-name">${esc(r.head_name || '(no name)')}</div>
+    <div class="rc-sub">${esc([r.village, r.district].filter(Boolean).join(', ') || '—')}${r.surveyor ? ` · ${esc(r.surveyor)}` : ''}${r.house_type ? ` · ${esc(r.house_type)}` : ''}</div>
+    ${(() => { const fc = filesCell(r), extra = `${!db && r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${!db && r.audio_count ? `<button class="link-btn" data-audio="${r.id}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}`; return extra || !/dim">—/.test(fc) ? `<div class="rc-files">${extra}${fc}</div>` : ''; })()}
+    <div class="rc-actions">${pdfBtn(r)}${!db && (r.photo_count || r.audio_count || r.interview_transcript) ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}${!db ? `<button class="link-btn danger" data-del="${r.id}">delete</button>` : ''}</div>
+  </div>`; };
+  $('#localCards').innerHTML = records.map(card).join('');
+  $$('#localTable [data-del], #localCards [data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Delete this record (and its photos) from the device?')) return;
     await PhotoDB.del(b.dataset.del); saveRecords(getRecords().filter(r => r.id !== b.dataset.del)); renderLocalTable();
   });
-  $$('#localTable [data-view]').forEach(i => i.onclick = async () => openGallery('Stamped photos', await PhotoDB.get(i.dataset.view)));
-  $$('#localTable [data-pdf]').forEach(b => b.onclick = async () => {
+  $$('#localTable [data-view], #localCards [data-view]').forEach(i => i.onclick = async () => openGallery('Stamped photos', await PhotoDB.get(i.dataset.view)));
+  $$('#localTable [data-pdf], #localCards [data-pdf]').forEach(b => b.onclick = async () => {
     const id = b.dataset.pdf, rec = allRecords().find(x => String(x.id) === id); if (!rec) return;
     b.disabled = true;
     try { await PdfExport.generate(rec, rec.status === 'database' ? [] : await PhotoDB.get(id)); } // database rows: photos stay in Drive, the PDF links to them
     catch (e) { toast('PDF error: ' + e.message, 'err'); } finally { b.disabled = false; }
   });
-  $$('#localTable [data-attach]').forEach(b => b.onclick = async () => { b.disabled = true; const records = getRecords(); const rec = records.find(x => x.id === b.dataset.attach); let done = false; try { await attachFiles(rec); done = true; toast('Files uploaded to Drive', 'ok'); } catch (e) { rec.files_error = e.message; toast(e.message, 'err'); } saveRecords(records); if (done) { try { await refreshDbRows(); await pruneSynced(); } catch {} } renderLocalTable(); });
-  $$('#localTable [data-audio]').forEach(b => b.onclick = async () => {
+  $$('#localTable [data-attach], #localCards [data-attach]').forEach(b => b.onclick = async () => { b.disabled = true; const records = getRecords(); const rec = records.find(x => x.id === b.dataset.attach); let done = false; try { await attachFiles(rec); done = true; toast('Files uploaded to Drive', 'ok'); } catch (e) { rec.files_error = e.message; toast(e.message, 'err'); } saveRecords(records); if (done) { try { await refreshDbRows(); await pruneSynced(); } catch {} } renderLocalTable(); });
+  $$('#localTable [data-audio], #localCards [data-audio]').forEach(b => b.onclick = async () => {
     const clips = await PhotoDB.getAudio(b.dataset.audio); const rec = getRecords().find(x => x.id === b.dataset.audio);
     $('#photoDlgTitle').textContent = 'Interview recording & transcript';
     $('#photoDlgGallery').innerHTML = (clips.map((c, i) => `<figure class="audio-fig"><audio controls src="${c.dataUrl}"></audio><figcaption>Clip ${i + 1} · ${fmtDur(c.duration)} · ${fmtDate(c.taken_at)}${c.lat != null ? ` · ${(+c.lat).toFixed(5)}, ${(+c.lon).toFixed(5)}` : ''}</figcaption></figure>`).join('') + (rec?.interview_transcript ? `<div class="transcript-view"><div class="dim">Transcript (verbatim, as recorded)</div><p>${esc(rec.interview_transcript)}</p></div>` : '')) || '<p class="dim">No recording or transcript stored.</p>';
     $('#photoDlg').showModal();
   });
-  $$('#localTable [data-dl]').forEach(b => b.onclick = async () => {
+  $$('#localTable [data-dl], #localCards [data-dl]').forEach(b => b.onclick = async () => {
     for (const p of await PhotoDB.get(b.dataset.dl)) { download(`${b.dataset.dl.slice(0, 8)}_${p.name}`, await (await fetch(p.dataUrl)).blob()); await new Promise(r => setTimeout(r, 300)); }
     for (const c of await PhotoDB.getAudio(b.dataset.dl)) { download(`${b.dataset.dl.slice(0, 8)}_${c.name || 'audio.webm'}`, await (await fetch(c.dataUrl)).blob()); await new Promise(r => setTimeout(r, 300)); }
     const rec = getRecords().find(x => x.id === b.dataset.dl); if (rec?.interview_transcript) download(`${b.dataset.dl.slice(0, 8)}_transcript.txt`, rec.interview_transcript, 'text/plain;charset=utf-8');
@@ -1389,12 +1400,17 @@ async function adminFetch(params) {
   if (!settings.endpoint) throw new Error('No database endpoint configured (Settings)');
   const q = new URLSearchParams({ ...params, token: adminToken() });
   const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q);
-  const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Request failed');
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) { if (j.error === 'Invalid admin token') { rejectAdminKey(); throw new Error('Team key not accepted — it must match ADMIN_TOKEN in the Apps Script'); } throw new Error(j.error || `HTTP ${r.status}`); }
   return j;
 }
+/** A key the backend refuses is dropped everywhere at once, so no view keeps working on a stale key. */
+function rejectAdminKey() { settings.adminKey = ''; settings.adminKeyOk = false; LS.set('gs_settings', settings); sessionStorage.removeItem('gs_admin'); }
 async function adminPost(payload) {
+  if (!settings.endpoint) throw new Error('No database endpoint configured (Settings)');
   const r = await fetch(settings.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...payload, token: adminToken() }) });
-  const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Request failed');
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) { if (j.error === 'Invalid admin token') { rejectAdminKey(); throw new Error('Team key not accepted — it must match ADMIN_TOKEN in the Apps Script'); } throw new Error(j.error || `HTTP ${r.status}`); }
   return j;
 }
 const appUrl = () => location.origin + location.pathname;
@@ -1454,7 +1470,7 @@ async function adminConnect() {
   try { await adminLoad(); $('#adminLogin').hidden = true; $('#adminPanel').hidden = false; setStatus(st, ''); if (!settings.adminKeyOk) { settings.adminKeyOk = true; LS.set('gs_settings', settings); } }
   catch (e) {
     setStatus(st, e.message, 'err'); sessionStorage.removeItem('gs_admin');
-    if (/Invalid admin token/i.test(e.message)) { settings.adminKey = ''; settings.adminKeyOk = false; LS.set('gs_settings', settings); } // the key changed on the backend
+    if (/Invalid admin token|not accepted/i.test(e.message)) rejectAdminKey(); // the key changed on the backend
   }
 }
 let adminSheetSel = ''; // '' = the active response tab
@@ -1484,7 +1500,8 @@ function renderAdmin() {
   const cols = ['submitted_at', 'surveyor', 'head_name', 'village', 'district', 'postcode', 'house_type', 'monthly_income', 'household_size', 'latitude', 'longitude', 'photo_urls'];
   $('#adminTable').innerHTML = rows.length ? `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>` +
     rows.map(r => `<tr>${cols.map(c => `<td title="${esc(r[c])}">${c === 'photo_urls' && r[c] ? String(r[c]).split(/\s+/).filter(Boolean).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">${i + 1}</a>`).join(' ') : esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td><button class="link-btn danger" data-adel="${esc(r.id)}">delete</button></td></tr>`).join('') + '</tbody>' : '';
-  $$('#adminTable [data-adel]').forEach(b => b.onclick = async () => {
+  $('#adminCards').innerHTML = rows.map(r => `<div class="rec-card"><div class="rc-top"><span class="pill database">database</span><span class="rc-date">${esc(fmtDate(r.submitted_at))}</span></div><div class="rc-name">${esc(r.head_name || '(no name)')}</div><div class="rc-sub">${esc([r.village, r.district].filter(Boolean).join(', ') || '—')}${r.surveyor ? ` · ${esc(r.surveyor)}` : ''}${r.house_type ? ` · ${esc(r.house_type)}` : ''}</div><div class="rc-files">${String(r.photo_urls || '').split(/\s+/).filter(Boolean).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">📷 ${i + 1}</a>`).join(' ')}</div><div class="rc-actions"><button class="link-btn danger" data-adel="${esc(r.id)}">delete</button></div></div>`).join('');
+  $$('#adminTable [data-adel], #adminCards [data-adel]').forEach(b => b.onclick = async () => {
     if (!confirm('Permanently delete this submission from the Google Sheet?')) return;
     try { await adminPost({ action: 'delete', id: b.dataset.adel }); adminRows = adminRows.filter(r => r.id !== b.dataset.adel); renderAdmin(); toast('Deleted', 'ok'); }
     catch (e) { toast(e.message, 'err'); }
@@ -1671,7 +1688,7 @@ function init() {
   $('#adminExportBtn').onclick = () => Exports.csv(adminRows, 'geosurvey_all');
   $('#adminExportSpssBtn').onclick = () => Exports.spss(adminRows, 'geosurvey_all');
   $('#adminExportKmzBtn').onclick = () => Exports.kmz(adminRows, 'geosurvey_all');
-  $('#adminLogoutBtn').onclick = () => { sessionStorage.removeItem('gs_admin'); $('#adminPanel').hidden = true; $('#adminLogin').hidden = false; $('#adminToken').value = ''; setStatus($('#adminStatus'), ''); };
+  $('#adminLogoutBtn').onclick = () => { rejectAdminKey(); $('#adminPanel').hidden = true; $('#adminLogin').hidden = false; $('#adminToken').value = ''; setStatus($('#adminStatus'), ''); adminRows = []; toast('Disconnected — the team key was removed from this phone', 'ok'); };
 
   const offline = () => { $('#offlineBar').hidden = navigator.onLine; updateEngineChip(); };
   window.addEventListener('online', () => { offline(); syncPending(false); });

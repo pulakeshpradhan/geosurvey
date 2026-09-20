@@ -171,6 +171,19 @@ main { max-width: 920px; margin: 0 auto; padding: 20px 16px; }
 .pill.synced { background: var(--ok-soft); color: var(--ok); } .pill.pending { background: var(--warn-soft); color: var(--warn); } .pill.failed { background: var(--danger-soft); color: var(--danger); } .pill.sample { background: var(--accent-soft); color: var(--accent); } .pill.database { background: var(--accent-soft); color: var(--accent); }
 .table tr.team td { color: var(--muted); }
 .table .mini { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; display: block; cursor: zoom-in; }
+/* Phone layout for record lists: the wide table is replaced by cards (rendered alongside, toggled by width) */
+.rec-cards { display: none; flex-direction: column; gap: 8px; }
+.rec-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
+.rec-card.team { background: var(--card-soft); }
+.rec-card .rc-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rec-card .rc-date { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.rec-card .rc-name { font-weight: 800; font-size: 14px; }
+.rec-card .rc-sub { font-size: 12.5px; color: var(--muted); }
+.rec-card .rc-files { font-size: 12.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rec-card .rc-files .mini { width: 32px; height: 32px; object-fit: cover; border-radius: 6px; cursor: zoom-in; }
+.rec-card .rc-actions { display: flex; gap: 12px; flex-wrap: wrap; padding-top: 2px; border-top: 1px dashed var(--line); margin-top: 2px; }
+@media (max-width: 640px) { .responsive .table-wrap { display: none; } .responsive .rec-cards { display: flex; } }
+@media (min-width: 641px) { .rec-cards { display: none !important; } }
 .link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; padding: 0; }
 .link-btn.danger { color: var(--danger); }
 
@@ -251,6 +264,7 @@ small.hint-team { color: var(--accent); background: var(--accent-soft); border-r
 .chipbtn:hover { border-color: var(--line-strong); }
 .chipbtn[hidden] { display: none; }
 .radios { display: flex; flex-direction: column; gap: 6px; }
+.dlg .radios label.radio, .radios .radio { display: grid; flex-direction: unset; font-weight: 500; font-size: inherit; }
 .radio { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 11px; cursor: pointer; transition: .15s; background: #fff; }
 .radio:hover { border-color: var(--line-strong); }
 .radio input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -343,9 +357,23 @@ small.hint-team { color: var(--accent); background: var(--accent-soft); border-r
 @keyframes fade { from { opacity: 0; transform: translateY(-6px); } }
 
 @media (max-width: 640px) {
-  .topbar { flex-wrap: wrap; height: auto; padding: 8px 10px 6px; gap: 6px 8px; }
-  .brand { flex: 1; }
+  .topbar { flex-wrap: wrap; height: auto; padding: 8px 10px 6px; gap: 6px 6px; }
+  .brand { flex: 1; min-width: 0; overflow: hidden; }
+  .brand-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 16px; }
+  @media (max-width: 400px) { .brand-name { display: none; } }
+  #dbBtn, #editBtn { padding: 6px 10px; font-size: 13px; }
+  .topbar .icon-btn { padding: 5px; }
   #pdfBtn { padding: 6px 9px; font-size: 12.5px; }
+  .stats { grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stat { padding: 10px 10px; border-radius: 12px; }
+  .stat .v { font-size: 20px; } .stat .l { font-size: 11px; line-height: 1.2; }
+  .breakdowns { grid-template-columns: 1fr; gap: 14px; }
+  .gtop-right { width: 100%; }
+  .gtop-right .gbtn { flex: 1 1 auto; justify-content: center; padding: 0 9px; font-size: 12.5px; }
+  .qbar-pick { width: 100%; } .qbar-pick select { flex: 1; width: auto; min-width: 0; }
+  .qbar-actions { width: 100%; } .qbar-actions .gbtn { flex: 1; justify-content: center; }
+  .aidesign-dlg textarea { min-height: 110px; }
+  .action-bar .btn-ghost { padding: 8px 10px; }
   .tabs { order: 10; flex-basis: 100%; justify-content: space-between; background: var(--card-soft); border-radius: 10px; padding: 3px; }
   .tab { flex: 1; text-align: center; padding: 7px 4px; font-size: 13px; }
   .toasts { top: 104px; }
@@ -519,7 +547,10 @@ small.hint-team { color: var(--accent); background: var(--accent-soft); border-r
   .gform-tools { position: static; flex-direction: row; justify-content: center; order: -1; border-radius: 999px; width: max-content; margin: 0 auto 10px; }
   .gq-edit { grid-template-columns: 1fr; }
   .gform-title { font-size: 21px; }
-  .gtop-right { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+  .gtop-right { width: 100%; flex-wrap: wrap; gap: 6px; }
+  .gtop-right .gbtn { white-space: nowrap; height: 32px; }
+  .gtop-right .gsep { display: none; }
+  .qbar-actions .gbtn { white-space: nowrap; padding: 0 8px; }
   .approve-bar { bottom: 8px; border-radius: 16px; padding: 10px 12px; }
   .approve-hint { display: none; }
   .approve-bar .btn-row { width: 100%; justify-content: flex-end; }
