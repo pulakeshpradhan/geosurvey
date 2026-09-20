@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.16.0';
+const APP_VERSION = '1.16.1';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1329,6 +1329,18 @@ async function backupProject(schema) {
   if (!settings.endpoint || !adminToken() || !navigator.onLine) return null;
   try { return await adminPost({ action: 'saveProject', schema, appUrl: appUrl(), endpoint: settings.endpoint }); } catch { return null; }
 }
+/** Explicit "Save project to Drive": asks for the key if needed and reports the outcome. */
+async function saveProjectToDrive(schema = currentSchema()) {
+  if (!SECTIONS.length) return toast('No questionnaire yet — choose or design one first');
+  if (!settings.endpoint) return toast('Connect a database first (Settings → Database endpoint)', 'err');
+  if (!navigator.onLine) return toast('Offline — the Drive copy needs a connection; use Download instead', 'err');
+  if (!await requireAdmin('Saving the project file to Drive needs it')) return;
+  try {
+    const r = await adminPost({ action: 'saveProject', schema, appUrl: appUrl(), endpoint: settings.endpoint });
+    if (!r.projectUrl || /^ERROR/.test(r.projectUrl)) throw new Error(r.projectUrl || 'no file link returned');
+    toast(`Project file saved to the Drive folder as ${projectFileName(schema.title || FORM_META.title)}`, 'ok');
+  } catch (e) { toast('Could not save to Drive: ' + (/Unknown action/i.test(e.message) ? 'the backend is older than v1.16.0 — Settings → Test database updates it' : e.message), 'err'); }
+}
 async function adminConnect() {
   const st = $('#adminStatus');
   sessionStorage.setItem('gs_admin', $('#adminToken').value.trim() || adminToken());
@@ -1451,6 +1463,7 @@ function init() {
   $('#obUpload').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); $('#designerFile').click(); };
   $('#projectInput').onchange = e => { if (e.target.files[0]) openProjectFile(e.target.files[0]); e.target.value = ''; };
   $('#projectDlBtn').onclick = e => { e.preventDefault(); if (!SECTIONS.length) return toast('No questionnaire yet — choose or design one first'); downloadProject(); };
+  $('#projectDriveBtn').onclick = e => { e.preventDefault(); saveProjectToDrive(); };
   probeBackend();
   $('#settingsBtn').onclick = openSettings;
   $('#setModel').onchange = e => { $('#setModelCustom').hidden = e.target.value !== 'custom'; };

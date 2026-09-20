@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.16.0">
+  <link rel="stylesheet" href="styles.css?v=1.16.1">
 </head>
 <body>
   <header class="topbar">
@@ -160,7 +160,7 @@
           <button id="designerSample" class="gbtn" title="Load the sample questionnaire">Sample</button>
           <button id="designerReset" class="gbtn" title="Start from a blank questionnaire">Blank</button>
           <label class="gbtn" title="Open a .geosurvey project file or questionnaire JSON into the draft">Open file<input type="file" id="designerImport" accept=".geosurvey,application/json" hidden></label>
-          <button id="designerExport" class="gbtn" title="Save the draft as a .geosurvey project file (questionnaire + team connection)">Save project file</button>
+          <button id="designerExport" class="gbtn" title="Download the draft as a .geosurvey project file (and copy it to Drive when the team key is stored)">Save project file</button>
         </div>
       </div>
       <div id="designerIntake" hidden><div id="designerPages" class="thumb-strip"></div></div>
@@ -292,7 +292,7 @@
           <small id="endpointHint" class="hint-team" hidden></small>
           <small>Follow the <a href="guide/" target="_blank" rel="noopener">step-by-step setup slides</a> (or the <a href="https://github.com/pulakeshpradhan/geosurvey#readme" target="_blank" rel="noopener">written guide</a>). Blank = keep data on this device only. The backend updates itself; after editing Code.gs run <code>updateBackend</code>.</small>
         </label>
-        <div class="btn-row"><button type="button" id="testDbBtn" class="btn btn-outline btn-sm">Test database</button><button type="button" id="teamLinkBtn" class="btn btn-outline btn-sm" title="A link that connects any phone to this database when opened" hidden>Copy team link</button><button type="button" id="projectDlBtn" class="btn btn-outline btn-sm" title="Download a .geosurvey project file: the questionnaire plus the team connection. Open it on any phone from the start page.">Save project file</button><span id="testDbStatus" class="status" style="margin:0"></span></div>
+        <div class="btn-row"><button type="button" id="testDbBtn" class="btn btn-outline btn-sm">Test database</button><button type="button" id="teamLinkBtn" class="btn btn-outline btn-sm" title="A link that connects any phone to this database when opened" hidden>Copy team link</button><button type="button" id="projectDriveBtn" class="btn btn-outline btn-sm" title="Write <title>.geosurvey into the Drive folder (needs the team key)">Save project to Drive</button><button type="button" id="projectDlBtn" class="btn btn-outline btn-sm" title="Download the .geosurvey project file to this device: the questionnaire plus the team connection. Open it on any phone from the start page.">Download project file</button><span id="testDbStatus" class="status" style="margin:0"></span></div>
         <label>Team key (optional — unlocks the whole team's records)
           <input type="password" id="setTeamKey" class="input" placeholder="e.g. GeoSurvey" autocomplete="off">
           <small>The <code>ADMIN_TOKEN</code> in Code.gs (default <code>GeoSurvey</code>). With it, <b>Sync all</b> in Records shows every record submitted by the team; without it this phone only sends its own records.</small>
@@ -372,13 +372,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.16.0"></script>
-  <script src="qr.js?v=1.16.0"></script>
-  <script src="app.js?v=1.16.0"></script>
-  <script src="sav.js?v=1.16.0"></script>
-  <script src="exports.js?v=1.16.0"></script>
-  <script src="analysis.js?v=1.16.0"></script>
-  <script src="pdf.js?v=1.16.0"></script>
-  <script src="designer.js?v=1.16.0"></script>
+  <script src="config.js?v=1.16.1"></script>
+  <script src="qr.js?v=1.16.1"></script>
+  <script src="app.js?v=1.16.1"></script>
+  <script src="sav.js?v=1.16.1"></script>
+  <script src="exports.js?v=1.16.1"></script>
+  <script src="analysis.js?v=1.16.1"></script>
+  <script src="pdf.js?v=1.16.1"></script>
+  <script src="designer.js?v=1.16.1"></script>
 </body>
 </html>

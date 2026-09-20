@@ -66,7 +66,7 @@ On first start choose **Use sample**, **Design your own** (Google-Forms-style ed
 The questionnaire and the team connection travel together in one file, `<title>.geosurvey`:
 
 - **Automatic backup.** Every *Publish to team* (and every *Apply* on a connected admin phone) writes `<title>.geosurvey` into the Drive folder *GeoSurvey Photos*, plus a dated copy under *Questionnaire history*. The questionnaire is never only on one phone.
-- **Save a copy.** Settings → **Save project file**, or Edit → **Save project file**.
+- **Save a copy.** Settings → **Download project file** (to this device) or **Save project to Drive** (needs the team key). Edit → **Save project file** does both.
 - **Open it anywhere.** On a fresh phone choose **Open a project file** on the start page (or Edit → **Open file**): the questionnaire is installed and the phone is connected to the database in one step, no typing, no key. The file does not contain the admin key.
 
 ## Admin (team) key

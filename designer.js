@@ -233,7 +233,10 @@ const Designer = (() => {
       const r = await backupProject(d); if (r && r.projectUrl && !/^ERROR/.test(r.projectUrl)) toast('Project file backed up to the Drive folder', 'ok');
     }
   }
-  function exportJson() { downloadProject(normalise(clone(draft))); }
+  async function exportJson() {
+    const d = normalise(clone(draft)); downloadProject(d);
+    const r = await backupProject(d); if (r && r.projectUrl && !/^ERROR/.test(r.projectUrl)) toast('A copy also went to the Drive folder', 'ok');
+  }
   async function importJson(file) { try { const { schema } = await parseProjectFile(file); draft = { ...draft, ...schema, remarks: schema.remarks || clone(DEFAULT_SCHEMA.remarks) }; active = null; persist(); render(); toast('Questionnaire loaded into the draft — review and approve'); } catch (e) { toast('Import failed: ' + e.message, 'err'); } }
 
   /* ---------- document intake: PDF / images → page images ---------- */
