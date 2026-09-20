@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.16.2';
+const APP_VERSION = '1.16.3';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -825,6 +825,24 @@ function updateProviderUI() {
   $$('.rstat[data-stat]').forEach(el => { const [cls, txt] = st[el.dataset.stat]; el.className = 'rstat ' + cls; el.textContent = txt; });
   const eng = $('input[name="engine"]:checked')?.value || 'auto';
   $$('[data-for]').forEach(el => el.hidden = !el.dataset.for.split(' ').includes(eng));
+  updateSettingsStatus();
+}
+/** The two status tiles at the top of Settings: collection (database) and AI, from the saved state. */
+function updateSettingsStatus() {
+  const db = $('#stDb'), ai = $('#stAi'); if (!db || !ai) return;
+  const pending = getRecords().filter(r => r.status !== 'synced').length;
+  let dbCls = 'off', dbTxt = 'Not connected — paste the Web app URL below, scan your team\'s QR or open a project file';
+  if (settings.endpoint) {
+    const bits = [settings.backendVersion ? `Connected · backend v${settings.backendVersion}` : 'Endpoint set · not tested yet'];
+    if (pending) bits.push(`${pending} record${pending === 1 ? '' : 's'} waiting to send`);
+    if (dbRowsAt) bits.push(`${dbRows.length} ${dbScope === 'all' ? 'team' : 'of your'} record${dbRows.length === 1 ? '' : 's'} in the database`);
+    dbCls = settings.backendVersion ? (pending ? 'warn' : 'ok') : 'warn'; dbTxt = bits.join(' · ');
+  }
+  db.className = 'stat-tile ' + dbCls; $('#stDbText').textContent = dbTxt;
+  const ready = engineReady();
+  ai.className = 'stat-tile ' + (ready ? 'ok' : 'warn');
+  $('#stAiText').textContent = ready ? `Ready · ${engineLabel()}` : 'Not set up — pick a provider below and add a key, or ask your admin to enable Gemma 4 on the backend';
+  $('#quickQr').disabled = $('#teamLinkBtn').disabled = !(settings.endpoint || TEAM_ENDPOINT);
 }
 
 function promptFor(fields, ctx, sectionTitle, transcript = '', nAudio = 0) {
@@ -1423,7 +1441,7 @@ function updateEndpointHint() {
     : TEAM_ENDPOINT ? 'Your own URL overrides the team database built into the app; clear the box to go back to it.'
     : typed && typed === settings.endpoint && settings.endpointSource === 'link' ? 'Set from the team link.' : '';
   h.textContent = msg; h.hidden = !msg;
-  $('#teamLinkBtn').hidden = !(typed || TEAM_ENDPOINT);
+  $('#teamLinkBtn').disabled = $('#quickQr').disabled = !(typed || TEAM_ENDPOINT);
 }
 function saveSettings(quiet = false) {
   const modelSel = $('#setModel').value; const prev = settings;
@@ -1512,6 +1530,7 @@ function init() {
   welcome.addEventListener('close', () => LS.set('gs_welcomed', APP_VERSION));
   if (!LS.get('gs_welcomed', null)) setTimeout(() => { if (!$('#settingsDlg').open) welcome.showModal(); }, 400);
   $('#qrBtn').onclick = openTeamQr;
+  $('#quickQr').onclick = openTeamQr;
   $('#qrClose').onclick = () => $('#qrDlg').close();
   $('#qrSettings').onclick = () => { $('#qrDlg').close(); openSettings(); };
   $('#qrCopy').onclick = async () => { const link = teamLink(); try { await navigator.clipboard.writeText(link); toast('Team link copied', 'ok'); } catch { prompt('Copy this link:', link); } };
@@ -1542,7 +1561,7 @@ function init() {
     e.preventDefault(); const st = $('#testDbStatus'); const saved = settings; saveSettings(true); setStatus(st, 'Checking…', '', true);
     try { const msg = await testDatabase(); saved.folderUrl = settings.folderUrl; saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; LS.set('gs_settings', saved); st.className = 'status ok'; st.innerHTML = esc(msg) + (settings.folderUrl ? ` · <a href="${esc(settings.folderUrl)}" target="_blank" rel="noopener">open Drive folder</a>` : ''); }
     catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
-    finally { settings = saved; updateEngineChip(); }
+    finally { settings = saved; updateEngineChip(); updateSettingsStatus(); }
   };
   $('#exportCsvBtn').onclick = () => Exports.csv(allRecords());
   $('#exportJsonBtn').onclick = () => Exports.json(allRecords());
