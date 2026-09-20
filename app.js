@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.18.2';
+const APP_VERSION = '1.18.3';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },

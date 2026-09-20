@@ -365,19 +365,19 @@ small.hint-team { color: var(--accent); background: var(--accent-soft); border-r
      never truncates or hides them — sizes tighten instead on narrow phones. */
   .brand { flex: 1 0 auto; gap: 8px; }
   .brand-name { white-space: nowrap; font-size: 16px; }
-  #dbBtn, #editBtn { padding: 6px 10px; font-size: 13px; }
+  #dbBtn, #editBtn { padding: 6px 10px; font-size: 14px; }
   .topbar .icon-btn { padding: 5px; }
   @media (max-width: 400px) {
     .topbar { gap: 6px 4px; }
     .brand { gap: 7px; }
-    .brand-name { font-size: 15px; }
+    .brand-name { font-size: 16px; }
     .topbar .icon-btn { padding: 4px; }
-    #dbBtn, #editBtn { padding: 6px 8px; font-size: 12.5px; gap: 5px; }
+    #dbBtn, #editBtn { padding: 6px 7px; font-size: 14px; gap: 4px; }
   }
   @media (max-width: 340px) {
-    .brand-name { font-size: 14px; }
+    .brand-name { font-size: 15px; }
     .topbar .icon-btn { padding: 3px; }
-    #dbBtn, #editBtn { padding: 6px 6px; font-size: 12px; gap: 4px; }
+    #dbBtn, #editBtn { padding: 6px 5px; font-size: 13px; gap: 3px; }
   }
   /* Button rows: each group fills its row with equal-width buttons; pickers go full width */
   .card-head .btn-row { width: 100%; }
@@ -396,7 +396,7 @@ small.hint-team { color: var(--accent); background: var(--accent-soft); border-r
   .aidesign-dlg textarea { min-height: 110px; }
   .action-bar .btn-ghost { padding: 8px 10px; }
   .tabs { order: 10; flex-basis: 100%; justify-content: space-between; background: var(--card-soft); border-radius: 10px; padding: 3px; }
-  .tab { flex: 1; text-align: center; padding: 7px 4px; font-size: 13px; }
+  .tab { flex: 1; text-align: center; padding: 8px 4px; font-size: 15px; }
   .toasts { top: 104px; }
   .section-head { flex-wrap: wrap; }
   .section-toggle { flex-basis: 100%; }
