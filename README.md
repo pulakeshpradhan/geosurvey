@@ -95,30 +95,45 @@ The admin key is required for **Sync all**, **Edit** (questionnaire and *Collect
 - **Google quotas.** Apps Script limits daily external requests and execution time; very large teams or very large photos may hit them. Keep the *Image size sent to AI* setting at 1024 px unless detail is essential.
 - **Location accuracy** depends on the phone's GPS; wait for a reading of ±15 m or better before submitting.
 
-## Safe and unsafe
+## Do's and Don'ts
 
-### For the admin
+### Admin — Do
 
-| Safe | Unsafe |
-|---|---|
-| Sharing the QR code / team link with your own enumerators | Posting the team link or the `/exec` URL publicly — anyone holding it can submit junk records and use your AI quota |
-| Switching on the Apps Script API (`script.google.com/home/usersettings`) — it exposes nothing; it only lets your own script update itself | Leaving the admin key at the default `GeoSurvey` — with it, anyone who has the link can read and delete every record |
-| Storing the AI key and admin key in Code.gs or Script Properties — they never leave Google's servers | Typing the admin key on a phone that is not yours, or sending it in the same message as the link |
-| Letting the backend self-update from this repository (HTTPS to GitHub, official file only) | Losing control of the GitHub account of the repository named in `SOURCE_URL` — protect it with 2FA; forks must change `SOURCE_URL` |
-| Changing the admin key any time (edit `ADMIN_TOKEN`, run `updateBackend`) | Sharing the Google Sheet or the Drive folder with "Anyone with the link" — the app never needs that |
-| Creating a **new deployment** if the URL leaks (new URL, old one dead) and re-sharing the QR | Deleting the Sheet or the Drive folder — after sync it is the only copy of the data |
-| Regular exports (CSV / SPSS) as backups | Running the survey without respondent consent for photos, recordings and location |
+1. Share the QR code / team link only with your own enumerators.
+2. Switch on the Apps Script API (`script.google.com/home/usersettings`) — it exposes nothing; it only lets your own script update itself.
+3. Keep the AI key and admin key in Code.gs or Script Properties — they never leave Google's servers.
+4. Let the backend self-update from this repository (HTTPS to GitHub, official file only).
+5. Change the admin key before real data collection (edit `ADMIN_TOKEN`, run `updateBackend`).
+6. Create a **new deployment** if the URL leaks (new URL, old one dead) and re-share the QR.
+7. Export regularly (CSV / SPSS) as a backup.
+8. Protect the GitHub account behind `SOURCE_URL` with 2FA; if you fork the project, change `SOURCE_URL`.
 
-### For enumerators (users)
+### Admin — Don't
 
-| Safe | Unsafe |
-|---|---|
-| Scanning the team QR or opening the team link once — it only stores the database address on your phone | Forwarding the team link to people outside the project |
-| Using the app without any key — Sync shows only your own records | Entering an admin key someone else gave you "to try" — it unlocks everyone's records on that phone |
-| Working offline — records queue on the phone and send later | Clearing the browser's site data before Sync — queued records not yet sent are lost |
-| Checking and correcting yellow (AI-filled) answers before Submit | Submitting AI-filled answers unread — they are inferences, not facts |
-| Photographing dwellings, assets and consented documents | Photographing IDs, bank books or people without the respondent's consent |
-| Adding the app to the home screen | Using a shared or public phone for collection — records and the device id stay in that browser |
+1. Don't post the team link or the `/exec` URL publicly — anyone holding it can submit junk records and use your AI quota.
+2. Don't leave the admin key at the default `GeoSurvey` — with it, anyone who has the link can read and delete every record.
+3. Don't type the admin key on a phone that is not yours, and don't send it in the same message as the link.
+4. Don't share the Google Sheet or the Drive folder with "Anyone with the link" — the app never needs that.
+5. Don't delete the Sheet or the Drive folder — after sync it is the only copy of the data.
+6. Don't run the survey without respondent consent for photos, recordings and location.
+
+### Enumerators — Do
+
+1. Scan the team QR or open the team link once — it only stores the database address on your phone.
+2. Use the app without any key — Sync shows only your own records.
+3. Work offline when needed — records queue on the phone and are sent later.
+4. Check and correct yellow (AI-filled) answers before Submit.
+5. Photograph dwellings, assets and only the documents the respondent has agreed to show.
+6. Add the app to the home screen.
+
+### Enumerators — Don't
+
+1. Don't forward the team link to people outside the project.
+2. Don't enter an admin key someone gave you "to try" — it unlocks everyone's records on that phone.
+3. Don't clear the browser's site data before Sync — queued records not yet sent are lost.
+4. Don't submit AI-filled answers unread — they are inferences, not facts.
+5. Don't photograph IDs, bank books or people without the respondent's consent.
+6. Don't use a shared or public phone for collection — records and the device id stay in that browser.
 
 ---
 
