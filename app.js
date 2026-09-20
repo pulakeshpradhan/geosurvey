@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.7';
+const APP_VERSION = '1.15.8';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -458,14 +458,23 @@ function scheduleDraftSave() { clearTimeout(draftTimer); draftTimer = setTimeout
 function restoreDraft() { const d = LS.get('gs_draft', null); if (!d) return; Object.entries(d).forEach(([k, v]) => { if (k === '__transcript') { if (v && $('#transcript')) { $('#transcript').value = v; $('#transcriptWrap').hidden = false; updateAnalyzeBtn(); } } else if (k === '__translation') { /* legacy draft field, ignored */ } else setValue(k, v); }); }
 
 /* ------------------------------------------------------------------ */
-/* Location: Geolocation API + OSM Nominatim reverse geocoding          */
+/* Location: Geolocation API + Google geocoder via backend, OSM fallback  */
 /* ------------------------------------------------------------------ */
 let lastFix = null; // { lat, lon, acc, alt, time, place }
 
 function getPosition(opts) {
   return new Promise((res, rej) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(res, rej, opts) : rej(new Error('Geolocation not supported')));
 }
+/* Address lookup: Google's geocoder through the team backend (same data as GPS Map Camera, no key on the phone),
+ * falling back to OpenStreetMap's Nominatim when there is no backend or it cannot answer. */
 async function reverseGeocode(lat, lon) {
+  if (settings.endpoint) { // an older backend answers without a place and we fall through
+    try {
+      const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + `action=geocode&lat=${lat}&lon=${lon}`);
+      const j = await r.json();
+      if (j.ok && j.place && (j.place.village || j.place.district || j.place.postcode)) return j.place;
+    } catch { /* fall through to OSM */ }
+  }
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1&accept-language=en`;
   const r = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!r.ok) throw new Error('Reverse geocoding failed (' + r.status + ')');
@@ -475,10 +484,10 @@ async function reverseGeocode(lat, lon) {
     postcode: a.postcode || '',
     block: a.municipality || a.county || a.city_district || a.subdistrict || '',
     district: a.state_district || a.district || a.county || '',
-    state: a.state || a.region || '', country: a.country || '', full_address: j.display_name || '',
+    state: a.state || a.region || '', country: a.country || '', full_address: j.display_name || '', source: 'osm',
   };
 }
-function placeLabel(p) { return p ? [p.village, p.district, p.state, p.postcode].filter(Boolean).join(', ') : ''; }
+function placeLabel(p) { return p ? [p.village, p.block, p.district, p.state, p.postcode].filter(Boolean).join(', ') : ''; }
 
 /* Automatic precise location (like delivery apps): start a high-accuracy watch on open / new record / foreground,
  * keep the best fix, refine until ≤ GOOD_ACC m or the time budget ends, then reverse-geocode. No button needed. */
@@ -500,7 +509,7 @@ async function finishLocating() {
     catch { /* keep coordinates; address can be retried with Refresh */ }
   } else if (!moved && lastFix.place) Object.entries(lastFix.place).forEach(([k, v]) => { if (!getValue(k)) setValue(k, v); });
   st.className = 'status ok';
-  st.innerHTML = `${lastFix.place ? esc(placeLabel(lastFix.place)) + ' · ' : ''}±${Math.round(lastFix.acc)} m${lastFix.acc > GOOD_ACC ? ' (best available)' : ''} · <a href="https://www.openstreetmap.org/?mlat=${lastFix.lat}&mlon=${lastFix.lon}#map=17/${lastFix.lat}/${lastFix.lon}" target="_blank" rel="noopener">map</a>`;
+  st.innerHTML = `${lastFix.place ? esc(placeLabel(lastFix.place)) + ' · ' : ''}±${Math.round(lastFix.acc)} m${lastFix.acc > GOOD_ACC ? ' (best available)' : ''} · <a href="https://www.google.com/maps?q=${lastFix.lat},${lastFix.lon}" target="_blank" rel="noopener">map</a>${lastFix.place ? ` <span class="dim">· address via ${lastFix.place.source === 'google' ? 'Google' : 'OpenStreetMap'}</span>` : ''}`;
   scheduleDraftSave(); updateProgress();
 }
 function autoLocate(force = false) {

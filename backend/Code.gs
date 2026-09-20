@@ -31,7 +31,7 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.15.6';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.15.8';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -263,6 +263,7 @@ function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
     if (p.action === 'schema') { var js = getConfig_('schema'); return json_({ ok: true, schema: js ? JSON.parse(js) : null, ai: !!aiKey_(), aiModel: AI_MODEL, version: BACKEND_VERSION }); }
+    if (p.action === 'geocode') return json_(geocode_(parseFloat(p.lat), parseFloat(p.lon)));
     if (p.action === 'ping') { // health check: version, sheet, Drive folder (created if missing)
       var fu = '', ferr = ''; try { fu = folder_().getUrl(); } catch (e0) { ferr = /permission/i.test(String(e0)) ? 'DRIVE_NOT_AUTHORIZED' : String(e0); }
       return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: Math.max(0, getSheet_().getLastRow() - 1), ai: !!aiKey_(), aiModel: AI_MODEL });
@@ -295,6 +296,27 @@ function doGet(e) {
 }
 
 function folderUrlSafe_() { try { return folder_().getUrl(); } catch (e) { return ''; } }
+/** Reverse geocoding with Google's geocoder (Apps Script Maps service, no API key): village / block / district / PIN. */
+function geocode_(lat, lon) {
+  if (!isFinite(lat) || !isFinite(lon)) return { ok: false, error: 'lat and lon are required', version: BACKEND_VERSION };
+  try {
+    var g = Maps.newGeocoder().setLanguage('en').reverseGeocode(lat, lon);
+    var res = (g && g.results) || [];
+    if (!res.length) return { ok: true, place: null, status: g && g.status, version: BACKEND_VERSION };
+    // Most specific result first; for each wanted level take the first component of that type across all results
+    var pick = function (types) { for (var t = 0; t < types.length; t++) for (var i = 0; i < res.length; i++) { var c = res[i].address_components || []; for (var k = 0; k < c.length; k++) if (c[k].types.indexOf(types[t]) !== -1) return c[k].long_name; } return ''; };
+    return { ok: true, version: BACKEND_VERSION, place: {
+      village: pick(['locality', 'sublocality_level_1', 'sublocality', 'neighborhood', 'administrative_area_level_4', 'administrative_area_level_5']),
+      block: pick(['administrative_area_level_3']),
+      district: pick(['administrative_area_level_2']),
+      state: pick(['administrative_area_level_1']),
+      postcode: pick(['postal_code']),
+      country: pick(['country']),
+      full_address: res[0].formatted_address || '',
+      source: 'google',
+    } };
+  } catch (e) { return { ok: false, error: String(e), version: BACKEND_VERSION }; }
+}
 /** Store photos / audio / transcript for an already-submitted record and write the links into its row. */
 function attachFiles_(data) {
   var sh = getSheet_(); var rid = String(data.id || '');
