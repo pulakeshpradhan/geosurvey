@@ -31,7 +31,7 @@
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.16.0';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.16.1';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -57,7 +57,14 @@ var SOURCE_URL = 'https://raw.githubusercontent.com/pulakeshpradhan/geosurvey/ma
 var CONFIG_VARS = ['ADMIN_TOKEN', 'AI_KEY', 'AI_MODEL', 'SHEET_ID', 'SHEET_NAME', 'PHOTO_FOLDER', 'CONFIG_SHEET'];
 
 /** ▶ Run this in the editor: publishes the current code as a new version (no more "New version" clicks) and checks GitHub. */
-function updateBackend() { var r = selfUpdate_(true); Logger.log(JSON.stringify(r)); return r; }
+function updateBackend() {
+  try { var r = selfUpdate_(true); Logger.log(JSON.stringify(r)); return r; }
+  catch (e) {
+    var m = String(e && e.message || e), hint = m === 'APPS_SCRIPT_API_DISABLED' ? 'Switch on "Google Apps Script API" at https://script.google.com/home/usersettings, then run updateBackend again.'
+      : m === 'NOT_AUTHORIZED' ? 'The manifest lacks the update scopes or they were not granted: paste backend/appsscript.json (Project Settings → show manifest), run authorizeDrive once, then updateBackend again.' : m;
+    Logger.log('updateBackend failed: ' + m + '\n' + hint); throw e;
+  }
+}
 /** Daily trigger target. */
 function autoUpdateBackend() { try { selfUpdate_(false); } catch (e) { Logger.log('Auto-update: ' + e); } }
 
@@ -101,7 +108,8 @@ function selfUpdate_(publishAnyway) {
     var current = versionOf_(code.source), changed = false;
     if (newer_(latest, current)) {
       code.source = carryConfig_(code.source, latestSrc);
-      api_('put', '/content', { files: files });   // the manifest is left untouched so no re-authorisation is ever needed
+      // Send only writable fields; the manifest is left untouched so no re-authorisation is ever needed
+      api_('put', '/content', { files: files.map(function (f) { return { name: f.name, type: f.type, source: f.source }; }) });
       changed = true; current = latest;
     } else if (!publishAnyway && !newer_(current, BACKEND_VERSION)) { // nothing new on GitHub and the saved code is already what runs
       return { ok: true, updated: false, version: current, latest: latest, deployed: BACKEND_VERSION };
