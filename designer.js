@@ -418,11 +418,13 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
   /* ---------- Design with AI: one-line brief → full questionnaire, or pasted text → formatted as written ---------- */
   const looksLikeQuestionnaire = t => t.length > 500 || (t.match(/^\s*(\d+[.)]|Q\d+|[a-z][.)])\s+/gim) || []).length >= 4;
   function aiDesignOpen() {
-    if (!engineReady()) { openSettings(); return toast(NO_ENGINE_MSG, 'err'); }
-    const dlg = $('#aiDesignDlg'); $('#aiDesignText').value = ''; $$('input[name="aiDesignMode"]').forEach(r => r.checked = r.value === 'auto'); setStatus($('#aiDesignStatus'), '');
-    dlg.returnValue = ''; dlg.showModal(); setTimeout(() => $('#aiDesignText').focus(), 50);
+    const dlg = $('#aiDesignDlg'), ready = engineReady();
+    $('#aiDesignText').value = ''; $$('input[name="aiDesignMode"]').forEach(r => r.checked = r.value === 'auto');
+    $('#aiDesignNoAi').hidden = ready; $('#aiDesignRun').disabled = !ready; setStatus($('#aiDesignStatus'), '');
+    dlg.returnValue = ''; dlg.showModal(); if (ready) setTimeout(() => $('#aiDesignText').focus(), 50);
   }
   async function aiDesignRun() {
+    if (!engineReady()) { $('#aiDesignNoAi').hidden = false; return; }
     const text = $('#aiDesignText').value.trim(); if (!text) return toast('Type a description or paste the questionnaire text first');
     let mode = $('input[name="aiDesignMode"]:checked')?.value || 'auto'; if (mode === 'auto') mode = looksLikeQuestionnaire(text) ? 'format' : 'design';
     if (draft.sections.some(s => s.fields.length) && !confirm('Replace the current draft with the AI result? (You can still Discard afterwards.)')) return;
@@ -461,6 +463,7 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
     $('#designerTextAiBtn').onclick = aiDesignOpen;
     $('#aiDesignRun').onclick = aiDesignRun;
     $('#aiDesignCancel').onclick = () => $('#aiDesignDlg').close('cancel');
+    $('#aiDesignSetup').onclick = () => { $('#aiDesignDlg').close('cancel'); openSettings(); setTimeout(() => $('#engineRadios')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300); };
     $('#aiDesignText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); aiDesignRun(); } });
     $('#qPick').onchange = e => pickQuestionnaire(e.target.value);
     $('#qNew').onclick = newQuestionnaire;

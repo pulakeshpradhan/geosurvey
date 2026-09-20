@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.17.1">
+  <link rel="stylesheet" href="styles.css?v=1.17.2">
 </head>
 <body>
   <header class="topbar">
@@ -404,6 +404,10 @@
     <form method="dialog" class="dlg">
       <h2>Design with AI</h2>
       <p class="sub">Type one line about the survey and AI designs the whole questionnaire — or paste an existing questionnaire and AI formats it exactly as written.</p>
+      <div id="aiDesignNoAi" class="note-box" hidden>
+        <b>AI is not set up on this phone yet.</b> Either the admin puts one free key into <code>AI_KEY</code> in the Apps Script (then every phone has AI), or add a Gemini key here.
+        <div class="btn-row" style="margin-top:8px"><button type="button" id="aiDesignSetup" class="btn btn-outline btn-sm">Set up AI in Settings</button><a class="btn btn-outline btn-sm" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Get a free key</a></div>
+      </div>
       <textarea id="aiDesignText" class="input" rows="7" placeholder="Examples:
 • Household socio-economic survey for rural West Bengal: housing, water, sanitation, income, assets, health, 5-point perceptions on government schemes
 • Paste here: 1. Name of respondent ____  2. Age ____  3. Main occupation: (a) farming (b) daily wage (c) service (d) other …"></textarea>
@@ -457,13 +461,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.17.1"></script>
-  <script src="qr.js?v=1.17.1"></script>
-  <script src="app.js?v=1.17.1"></script>
-  <script src="sav.js?v=1.17.1"></script>
-  <script src="exports.js?v=1.17.1"></script>
-  <script src="analysis.js?v=1.17.1"></script>
-  <script src="pdf.js?v=1.17.1"></script>
-  <script src="designer.js?v=1.17.1"></script>
+  <script src="config.js?v=1.17.2"></script>
+  <script src="qr.js?v=1.17.2"></script>
+  <script src="app.js?v=1.17.2"></script>
+  <script src="sav.js?v=1.17.2"></script>
+  <script src="exports.js?v=1.17.2"></script>
+  <script src="analysis.js?v=1.17.2"></script>
+  <script src="pdf.js?v=1.17.2"></script>
+  <script src="designer.js?v=1.17.2"></script>
 </body>
 </html>
