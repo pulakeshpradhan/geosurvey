@@ -56,6 +56,13 @@ You need two things: a **free AI key** and a **Google Sheet** to store the answe
 
 Every enumerator does Step 3 on their own phone with the **same key and the same URL**. All phones then write into the same Sheet.
 
+**Skip the pasting on the phones — two options (either one works, Settings always remains as the manual fallback):**
+
+- **Team link:** in Settings press **Copy team link** (next to *Test database*) and send that link to the enumerators. Opening it once connects the phone to your database; the link is `…/geosurvey/?db=<Web app URL>`.
+- **Built into the app:** if you host your own copy of the app, put the Web app URL into [config.js](config.js) (`endpoint: '…/exec'`). Every phone that opens the app is then connected, and Settings shows *Pre-set by your team*.
+
+Together with the Gemma 4 option below, a phone then needs **nothing at all** in Settings.
+
 ### Optional – Gemma 4 for the whole team, no key on the phones
 
 If you would rather not give the AI key to every enumerator, put it in the backend once and let Google's **Gemma 4** model do the photo analysis for everyone:
@@ -122,4 +129,4 @@ Photos come only from the camera (no gallery uploads) and are stamped with time,
 
 ## Technical notes (for developers)
 
-Static site (HTML/JS, no build step) hosted on GitHub Pages; backend is a Google Apps Script bound to a Sheet (rows) with Drive for media and a *Config* tab for the published questionnaire. AI: Gemini (`gemini-3.5-flash-lite` by default) with strict JSON schemas; audio and images are sent in one request. Alternatively Gemma 4 (`gemma-4-26b-a4b-it` / `gemma-4-31b-it`) through the Apps Script `action=ai` proxy, which holds the key server-side and only forwards `gemma-*` models; the client degrades schema → JSON mode → free text. Location: Geolocation API with a refining watch + OpenStreetMap Nominatim reverse geocoding. Exports: CSV/JSON, a native SPSS `.sav` writer (`sav.js`), KMZ with an in-browser ZIP writer, jsPDF for the A4 form. Analysis runs in a Web Worker (`stats-worker.js`): descriptives, t-test/ANOVA/chi-square/regression, Cronbach's α, EFA, CB-SEM (ML), PLS-SEM with bootstrap, mediation, moderation, higher-order constructs. Questionnaire schema is dynamic (`applySchema`); constructs derive from Likert construct codes. Files: `index.html`, `styles.css`, `app.js`, `designer.js`, `analysis.js`, `stats-worker.js`, `exports.js`, `sav.js`, `pdf.js`, `sw.js`, `backend/Code.gs`, `backend/appsscript.json`. Deploy by pushing to `main`.
+Static site (HTML/JS, no build step) hosted on GitHub Pages; backend is a Google Apps Script bound to a Sheet (rows) with Drive for media and a *Config* tab for the published questionnaire. AI: Gemini (`gemini-3.5-flash-lite` by default) with strict JSON schemas; audio and images are sent in one request. Alternatively Gemma 4 (`gemma-4-26b-a4b-it` / `gemma-4-31b-it`) through the Apps Script `action=ai` proxy, which holds the key server-side and only forwards `gemma-*` models; the client degrades schema → JSON mode → free text. Location: Geolocation API with a refining watch + OpenStreetMap Nominatim reverse geocoding. Exports: CSV/JSON, a native SPSS `.sav` writer (`sav.js`), KMZ with an in-browser ZIP writer, jsPDF for the A4 form. Analysis runs in a Web Worker (`stats-worker.js`): descriptives, t-test/ANOVA/chi-square/regression, Cronbach's α, EFA, CB-SEM (ML), PLS-SEM with bootstrap, mediation, moderation, higher-order constructs. Questionnaire schema is dynamic (`applySchema`); constructs derive from Likert construct codes. Files: `index.html`, `styles.css`, `config.js` (team defaults), `app.js`, `designer.js`, `analysis.js`, `stats-worker.js`, `exports.js`, `sav.js`, `pdf.js`, `sw.js`, `backend/Code.gs`, `backend/appsscript.json`. Deploy by pushing to `main`.

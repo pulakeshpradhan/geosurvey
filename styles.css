@@ -126,6 +126,7 @@ main { max-width: 920px; margin: 0 auto; padding: 20px 16px; }
 .btn-row.end { justify-content: flex-end; margin-top: 6px; }
 .inline-form { display: flex; gap: 8px; max-width: 480px; }
 .photo-actions { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.btn-icon { padding: 8px 11px; }
 .photo-actions h2 { flex: 1; min-width: 140px; }
 .photo-actions .btn-primary { margin-left: auto; }
 #photoCard .thumb-strip { margin: 12px 0 0; }
@@ -192,6 +193,7 @@ dialog::backdrop { background: rgba(11,14,19,.5); }
 .dlg legend { font-size: 12px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; padding: 0 6px; }
 .dlg label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; }
 .dlg small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.dlg small.hint-team { color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 5px 8px; }
 .dlg .check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
 .dlg .check input { width: auto; accent-color: var(--accent); }
 .photo-dlg { width: min(1100px, 96vw); background: #111; border: 0; }
@@ -224,6 +226,7 @@ dialog::backdrop { background: rgba(11,14,19,.5); }
   .photo-actions h2 { flex-basis: 100%; }
   .photo-count { display: none; }
   .photo-actions .btn { flex: 1; }
+  .photo-actions .btn-icon { flex: 0 0 auto; }
   .photo-actions .btn-primary { margin-left: auto; }
   .inline-form { flex-direction: column; }
   .input-sm { width: 100%; }

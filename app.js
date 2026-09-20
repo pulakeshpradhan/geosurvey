@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.0';
+const APP_VERSION = '1.15.1';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -237,6 +237,22 @@ const META_FIELDS = [
 /* ------------------------------------------------------------------ */
 const DEFAULT_SETTINGS = { engine: 'auto', geminiKey: '', model: 'gemini-3.5-flash-lite', orKey: '', orModel: 'google/gemini-2.5-flash-lite', gemmaModel: 'gemma-4-26b-a4b-it', endpoint: '', surveyor: '', maxDim: 1024, stamp: true, uploadPhotos: true, sampleTools: false };
 let settings = Object.assign({}, DEFAULT_SETTINGS, LS.get('gs_settings', {}));
+
+/* Database endpoint, in order of precedence: typed in Settings → ?db= link → config.js team default. */
+const TEAM_ENDPOINT = (typeof GS_CONFIG !== 'undefined' && GS_CONFIG.endpoint || '').trim();
+const ENDPOINT_RE = /^https:\/\/script\.google\.com\/(?:a\/macros\/[^/]+\/|macros\/)s\/[\w-]+\/exec$/;
+function setEndpoint(url, source) {
+  if (url === settings.endpoint && settings.endpointSource === source) return false;
+  if (url !== settings.endpoint) { delete settings.backendAI; delete settings.backendVersion; delete settings.folderUrl; }
+  settings.endpoint = url; settings.endpointSource = source; LS.set('gs_settings', settings);
+  return true;
+}
+/** Adopt the endpoint from a ?db= link or from config.js unless the enumerator typed their own. */
+function resolveEndpoint() {
+  const qp = new URLSearchParams(location.search); const link = (qp.get('db') || qp.get('endpoint') || '').trim();
+  if (link) { history.replaceState(null, '', location.pathname + location.hash); if (ENDPOINT_RE.test(link) && setEndpoint(link, 'link')) toast('Connected to the team database from the link', 'ok'); else if (!ENDPOINT_RE.test(link)) toast('The link carries an invalid database URL — ask your admin for a new team link', 'err'); }
+  if (TEAM_ENDPOINT && (!settings.endpoint || settings.endpointSource === 'team')) setEndpoint(TEAM_ENDPOINT, 'team');
+}
 
 const PhotoDB = {
   db: null,
@@ -1027,7 +1043,9 @@ function probeBackend() {
   if (!settings.endpoint || !navigator.onLine) return;
   fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=schema').then(r => r.json()).then(j => {
     if (!j.ok) return;
+    const wasReady = engineReady();
     noteBackend(j);
+    if (!wasReady && engineReady()) toast('Photo auto-fill is ready — Gemma 4 through the team backend', 'ok');
     if (j.schema && j.schema.version > (LS.get('gs_schema', { version: 0 }).version || 0)) { LS.set('gs_schema', j.schema); applySchema(j.schema); toast('Questionnaire updated to the team version', 'ok'); }
   }).catch(() => {});
 }
@@ -1194,18 +1212,30 @@ function openSettings() {
   $('#setModel').value = known ? settings.model : 'custom'; $('#setModelCustom').hidden = known; $('#setModelCustom').value = known ? '' : settings.model;
   $('#setEndpoint').value = settings.endpoint; $('#setSurveyor').value = settings.surveyor;
   $('#setMaxDim').value = settings.maxDim; $('#setRecLang').value = settings.recLang || ''; $('#setStamp').checked = settings.stamp; $('#setUploadPhotos').checked = settings.uploadPhotos; $('#setSampleTools').checked = settings.sampleTools;
+  updateEndpointHint();
+  $('#settingsDlg').returnValue = ''; // Escape keeps the previous value otherwise, which could re-save
   $('#settingsDlg').showModal();
+}
+function updateEndpointHint() {
+  const typed = $('#setEndpoint').value.trim(); const h = $('#endpointHint');
+  const msg = TEAM_ENDPOINT && (!typed || typed === TEAM_ENDPOINT) ? 'Pre-set by your team — nothing to do here. Type another URL only to use a different database.'
+    : TEAM_ENDPOINT ? 'Your own URL overrides the team database built into the app; clear the box to go back to it.'
+    : typed && typed === settings.endpoint && settings.endpointSource === 'link' ? 'Set from the team link.' : '';
+  h.textContent = msg; h.hidden = !msg;
+  $('#teamLinkBtn').hidden = !(typed || TEAM_ENDPOINT);
 }
 function saveSettings(quiet = false) {
   const modelSel = $('#setModel').value; const prev = settings;
+  const typed = $('#setEndpoint').value.trim(); const endpoint = typed || TEAM_ENDPOINT;
   settings = {
     engine: $('#setEngine').value, geminiKey: $('#setKey').value.trim(),
     model: modelSel === 'custom' ? ($('#setModelCustom').value.trim() || DEFAULT_SETTINGS.model) : modelSel,
     orKey: $('#setOrKey').value.trim(), orModel: $('#setOrModel').value.trim() || DEFAULT_SETTINGS.orModel,
     gemmaModel: $('#setGemmaModel').value || DEFAULT_SETTINGS.gemmaModel,
-    endpoint: $('#setEndpoint').value.trim(), surveyor: $('#setSurveyor').value.trim(),
+    endpoint, endpointSource: !endpoint ? '' : endpoint === prev.endpoint ? prev.endpointSource : endpoint === TEAM_ENDPOINT ? 'team' : 'user',
+    surveyor: $('#setSurveyor').value.trim(),
     maxDim: +$('#setMaxDim').value, recLang: $('#setRecLang').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
-    folderUrl: settings.folderUrl || '',
+    folderUrl: endpoint === prev.endpoint ? prev.folderUrl || '' : '',
   };
   // What we know about the backend only holds while the endpoint is unchanged
   if (settings.endpoint === prev.endpoint) { settings.backendAI = prev.backendAI; settings.backendVersion = prev.backendVersion; }
@@ -1234,6 +1264,7 @@ function init() {
   renderForm();
   setValue('survey_date', new Date().toISOString().slice(0, 10));
   if (settings.surveyor) setValue('surveyor', settings.surveyor);
+  resolveEndpoint();
   restoreDraft(); updateProgress(); updatePendingBadge(); updateEngineChip(); detectChromeAI();
   autoLocate();
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#formView').hidden && (!lastFix || Date.now() - lastFix.time > 300000)) autoLocate(); });
@@ -1253,11 +1284,31 @@ function init() {
     finally { if (settings.endpoint === saved.endpoint) { saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; } settings = saved; LS.set('gs_settings', saved); updateEngineChip(); }
   };
   $('#settingsDlg').addEventListener('close', () => { if ($('#settingsDlg').returnValue === 'save') saveSettings(); });
+  $('#cancelSettingsBtn').onclick = () => $('#settingsDlg').close('cancel');
+  // Enter inside a field must not submit the dialog (the first submit button is Cancel): run the matching test instead
+  $('#settingsDlg form').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+    e.preventDefault();
+    if (['setKey', 'setOrKey', 'setOrModel', 'setModelCustom'].includes(e.target.id)) $('#testAiBtn').click();
+    else if (e.target.id === 'setEndpoint') $('#testDbBtn').click();
+    else e.target.blur();
+  });
+  $('#setEndpoint').addEventListener('input', updateEndpointHint);
+  $('#teamLinkBtn').onclick = async e => {
+    e.preventDefault();
+    const url = $('#setEndpoint').value.trim() || TEAM_ENDPOINT; if (!url) return;
+    if (!ENDPOINT_RE.test(url)) return toast('Enter the Web app URL first — it ends with /exec', 'err');
+    const link = `${location.origin}${location.pathname}?db=${encodeURIComponent(url)}`;
+    try { await navigator.clipboard.writeText(link); toast('Team link copied — enumerators who open it are connected to this database automatically', 'ok'); }
+    catch { prompt('Copy this link and send it to the enumerators:', link); }
+  };
   $('#photoDlgClose').onclick = () => $('#photoDlg').close();
   $('#locateBtn').onclick = () => detectLocation(false);
   $('#captureInput').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
   $('#analyzeBtn').onclick = () => analyzePhotos();
   $('#recBtn').onclick = toggleRecording;
+  // Pen: open the transcript box for typed notes; tapping it again while the box is empty closes it
+  $('#writeBtn').onclick = () => { const w = $('#transcriptWrap'); const ta = $('#transcript'); if (!w.hidden && !ta.value.trim() && !audioClips.length) { w.hidden = true; return; } w.hidden = false; ta.focus(); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
   $('#transcript').addEventListener('input', () => { $('#transcript').dataset.auto = '0'; updateAnalyzeBtn(); scheduleDraftSave(); });
   $('#transcriptClear').onclick = () => { $('#transcript').value = ''; $('#transcriptWrap').hidden = true; updateAnalyzeBtn(); };
   $('#submitBtn').onclick = submitForm;
@@ -1295,7 +1346,8 @@ function init() {
   window.addEventListener('offline', offline);
   offline();
 
-  if (!engineReady()) setTimeout(() => toast('Tip: photo auto-fill needs an API key in Settings, or a database backend with Gemma 4 enabled by your admin'), 800);
+  // Hold the tip while the backend probe may still turn Gemma 4 on
+  if (!engineReady() && !(settings.endpoint && settings.backendAI === undefined && navigator.onLine)) setTimeout(() => toast('Tip: photo auto-fill needs an API key in Settings, or a database backend with Gemma 4 enabled by your admin'), 800);
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
     // When an updated service worker takes over, reload once so HTML and scripts never mix versions
