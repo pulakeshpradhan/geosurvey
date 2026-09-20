@@ -358,11 +358,17 @@ small.hint-team { color: var(--accent); background: var(--accent-soft); border-r
 
 @media (max-width: 640px) {
   .topbar { flex-wrap: wrap; height: auto; padding: 8px 10px 6px; gap: 6px 6px; }
-  .brand { flex: 1; min-width: 0; overflow: hidden; }
-  .brand-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 16px; }
-  @media (max-width: 400px) { .brand-name { display: none; } }
+  /* The brand name is always shown: it never shrinks or truncates; on very
+     narrow phones the Data/Edit buttons drop their text (icons + tooltips stay). */
+  .brand { flex: 1 0 auto; gap: 8px; }
+  .brand-name { white-space: nowrap; font-size: 16px; }
   #dbBtn, #editBtn { padding: 6px 10px; font-size: 13px; }
   .topbar .icon-btn { padding: 5px; }
+  @media (max-width: 400px) {
+    .topbar { gap: 6px 4px; }
+    #dbBtn .lbl, #editBtn .lbl { display: none; }
+    #dbBtn, #editBtn { padding: 6px 8px; }
+  }
   #pdfBtn { padding: 6px 9px; font-size: 12.5px; }
   .stats { grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
   .stat { padding: 10px 10px; border-radius: 12px; }
