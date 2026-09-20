@@ -47,15 +47,15 @@ The backend now keeps itself current: whenever a newer `Code.gs` is released, th
 3. **Analyze & fill.** AI-filled answers are highlighted in yellow for review. Complete the rest manually.
 4. **Submit.** Without internet the record is queued and sent automatically later.
 
-**PDF** (bottom bar) produces an A4 copy of the form as filled right now; every saved record has its own **PDF** button in the Records tab (photos embedded for records on this phone, Drive links for records from other phones). Photos are camera-only and stamped with time, coordinates and address.
+**PDF** (bottom bar) produces an A4 copy of the form as filled right now; every saved record has its own **PDF** button under **Data** (photos embedded for records on this phone, Drive links for records from other phones). Photos are camera-only and stamped with time, coordinates and address.
 
 ---
 
 ## Data
 
-- **Records tab:** **Sync** sends queued records and then lists this phone's records straight from the database; the phone keeps no copy afterwards. **Sync all** lists every record from every phone and requires the **team key**.
+- **Data** (header button, badge = records waiting): **Sync** sends queued records and then lists this phone's records straight from the database; the phone keeps no copy afterwards. **Sync all** lists every record from every phone and requires the **team key**.
 - **Google Sheet** (*Responses* tab): all submissions, one row each. **Google Drive** folder *GeoSurvey Photos*: photos, recordings and transcripts, linked from the sheet.
-- **Analysis tab:** automatic statistics and a plain-language report on the synced data. Exports (CSV, JSON, SPSS, KMZ) are on the Records tab.
+- **Analysis tab:** automatic statistics and a plain-language report on the synced data. Exports (CSV, JSON, SPSS, KMZ) are under **Data**.
 
 ## Questionnaire
 
