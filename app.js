@@ -1,11 +1,11 @@
 /* GeoSurvey — AI-assisted socio-economic survey
- * Static app: Gemini / OpenRouter / Chrome built-in AI (auto-fill from photos, whole form or per section),
- * Geolocation + OSM Nominatim, geo/time-stamped photos, Google Apps Script (Sheets + Drive) backend
- * with offline queue, admin panel, CSV/JSON/SPSS/KMZ export.
+ * Static app: Gemini / OpenRouter / Gemma 4 via the team backend / Chrome built-in AI (auto-fill from photos,
+ * whole form or per section), Geolocation + OSM Nominatim, geo/time-stamped photos, Google Apps Script
+ * (Sheets + Drive) backend with offline queue, admin panel, CSV/JSON/SPSS/KMZ export.
  */
 'use strict';
 
-const APP_VERSION = '1.14.2';
+const APP_VERSION = '1.15.0';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -235,7 +235,7 @@ const META_FIELDS = [
 /* ------------------------------------------------------------------ */
 /* Storage: settings + records in localStorage, photos in IndexedDB     */
 /* ------------------------------------------------------------------ */
-const DEFAULT_SETTINGS = { engine: 'auto', geminiKey: '', model: 'gemini-3.5-flash-lite', orKey: '', orModel: 'google/gemini-2.5-flash-lite', endpoint: '', surveyor: '', maxDim: 1024, stamp: true, uploadPhotos: true, sampleTools: false };
+const DEFAULT_SETTINGS = { engine: 'auto', geminiKey: '', model: 'gemini-3.5-flash-lite', orKey: '', orModel: 'google/gemini-2.5-flash-lite', gemmaModel: 'gemma-4-26b-a4b-it', endpoint: '', surveyor: '', maxDim: 1024, stamp: true, uploadPhotos: true, sampleTools: false };
 let settings = Object.assign({}, DEFAULT_SETTINGS, LS.get('gs_settings', {}));
 
 const PhotoDB = {
@@ -708,6 +708,7 @@ async function transcribeClip(clip) {
 
 /* ------------------------------------------------------------------ */
 /* AI providers: Gemini (native), OpenRouter (OpenAI-style),            */
+/* Gemma 4 through the Apps Script backend (key held by the admin),     */
 /* Chrome built-in Prompt API (Gemini Nano, no key — when available)    */
 /* ------------------------------------------------------------------ */
 let chromeAI = null; // null = unknown, false = unavailable, 'available' | 'downloadable'
@@ -720,25 +721,31 @@ async function detectChromeAI() {
   updateEngineChip();
   return chromeAI;
 }
+/** Backend Gemma: true once the backend reported a configured key, false when it reported none, undefined = not asked yet. */
+const backendGemma = () => !!settings.endpoint && settings.backendAI !== false;
 function activeEngine() {
   if (settings.engine !== 'auto') return settings.engine;
   if (settings.geminiKey) return 'gemini';
   if (settings.orKey) return 'openrouter';
+  if (settings.endpoint && settings.backendAI) return 'gemma';
   if (chromeAI) return 'chrome';
   return 'gemini';
 }
 function engineReady() {
   const e = activeEngine();
-  return e === 'gemini' ? !!settings.geminiKey : e === 'openrouter' ? !!settings.orKey : !!chromeAI;
+  return e === 'gemini' ? !!settings.geminiKey : e === 'openrouter' ? !!settings.orKey : e === 'gemma' ? backendGemma() : !!chromeAI;
 }
 function engineLabel(e = activeEngine()) {
-  return e === 'gemini' ? `Gemini · ${settings.model}` : e === 'openrouter' ? `OpenRouter · ${settings.orModel}` : 'Chrome built-in AI (no key)';
+  return e === 'gemini' ? `Gemini · ${settings.model}` : e === 'openrouter' ? `OpenRouter · ${settings.orModel}` : e === 'gemma' ? `Gemma 4 via backend · ${settings.gemmaModel}` : 'Chrome built-in AI (no key)';
 }
+const NO_ENGINE_MSG = 'Set up AI in Settings first: an API key, or a database backend with Gemma 4 enabled';
 function updateEngineChip() {
   const chip = $('#engineChip');
   if (chip) { chip.textContent = engineLabel(); chip.className = 'chip ' + (engineReady() ? 'on' : ''); }
   const opt = $('#setEngine option[value="chrome"]');
   if (opt) opt.textContent = 'Chrome built-in AI (Gemini Nano, no key)' + (chromeAI ? (chromeAI === 'available' ? ' — ready' : ' — needs one-time download') : ' — not available in this browser');
+  const g = $('#setEngine option[value="gemma"]');
+  if (g) g.textContent = 'Gemma 4 via database backend (no key on this device)' + (!settings.endpoint ? ' — set the database endpoint first' : settings.backendAI === false ? ' — backend has no AI key yet' : settings.backendAI ? ' — ready' : '');
 }
 
 function promptFor(fields, ctx, sectionTitle, transcript = '', nAudio = 0) {
@@ -802,10 +809,28 @@ async function geminiCall(model, body) {
     return j;
   } catch (e) { return { error: { message: 'Network error: ' + e.message } }; }
 }
+/** Errors that no retry with a simpler request can fix. */
+const GEMMA_FATAL = /no AI key|old Code\.gs|Network error|endpoint|from the backend/i;
+/** Same request/response shape as geminiCall, but the backend adds the key and forwards it to Google. */
+async function gemmaCall(model, body) {
+  if (!settings.endpoint) return { error: { message: 'No database endpoint set (Settings)' } };
+  try {
+    const r = await fetch(settings.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'ai', model, body }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return { error: { message: `HTTP ${r.status} from the backend` } };
+    if (!j.version) return { error: { message: 'Backend is an old Code.gs without AI support — deploy the latest backend/Code.gs as a new version' } };
+    noteBackend(j);
+    if (j.error === 'AI_NOT_CONFIGURED') { settings.backendAI = false; LS.set('gs_settings', settings); updateEngineChip(); return { error: { message: 'The backend has no AI key yet — the admin pastes a free Google AI Studio key into AI_KEY in Code.gs and deploys a new version' } }; }
+    if (typeof j.error === 'string') return { error: { message: j.error } };
+    if (!j.error && settings.backendAI !== true) { settings.backendAI = true; LS.set('gs_settings', settings); updateEngineChip(); }
+    return j;
+  } catch (e) { return { error: { message: 'Network error: ' + e.message } }; }
+}
 /** Small text-only round trip to verify the configured provider. */
 async function testConnection() {
   const e = activeEngine();
   if (e === 'gemini') { const d = await geminiCall(settings.model, { contents: [{ role: 'user', parts: [{ text: 'Reply with the single word OK.' }] }] }); if (d.error) throw new Error(d.error.message); return `Gemini ${settings.model}: ${d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'reply received'}`; }
+  if (e === 'gemma') { const d = await gemmaCall(settings.gemmaModel, { contents: [{ role: 'user', parts: [{ text: 'Reply with the single word OK.' }] }] }); if (d.error) throw new Error(d.error.message); return `Gemma ${settings.gemmaModel} via backend v${d.version}: ${d.candidates?.[0]?.content?.parts?.map(p => p.text).join('').trim() || 'reply received'}`; }
   if (e === 'openrouter') { const r = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.orKey}` }, body: JSON.stringify({ model: settings.orModel, messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 5 }) }); const d = await r.json(); if (d.error) throw new Error(d.error.message); return `OpenRouter ${settings.orModel}: ${d.choices?.[0]?.message?.content?.trim() || 'reply received'}`; }
   if (!chromeAI) throw new Error('Chrome built-in AI not available'); return 'Chrome built-in AI available';
 }
@@ -831,6 +856,29 @@ async function analyzeGemini(fields, list, prompt, onStatus, audio = []) {
     const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
     if (!text) { lastErr = data.candidates?.[0]?.finishReason ? `Empty response (${data.candidates[0].finishReason})` : 'Empty response'; continue; }
     if (a.model !== settings.model) toast(`Model ${settings.model} failed — used ${a.model} instead`);
+    return extractJson(text);
+  }
+  throw new Error(lastErr);
+}
+async function analyzeGemma(fields, list, prompt, onStatus) {
+  if (!backendGemma()) throw new Error('Gemma 4 needs a database backend with AI enabled (Settings)');
+  onStatus(`Analyzing ${list.length ? `${list.length} photo(s)` : 'the transcript'} with ${settings.gemmaModel} on the team backend…`);
+  const parts = [{ text: prompt }, ...list.map(p => ({ inline_data: { mime_type: 'image/jpeg', data: p.dataUrl.split(',')[1] } }))];
+  const contents = [{ role: 'user', parts }];
+  const schema = geminiSchema(fields);
+  // Structured output support varies across Gemma releases: strict schema → JSON mode → free text
+  const attempts = [
+    { contents, generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.1, thinkingConfig: { thinkingLevel: 'minimal' } } },
+    { contents, generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.1 } },
+    { contents, generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } },
+    { contents, generationConfig: { temperature: 0.1 } },
+  ];
+  let lastErr = 'Gemma error';
+  for (const body of attempts) {
+    const data = await gemmaCall(settings.gemmaModel, body);
+    if (data.error) { lastErr = data.error.message || data.error.status || 'Gemma error'; if (GEMMA_FATAL.test(lastErr)) break; continue; }
+    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+    if (!text) { lastErr = data.candidates?.[0]?.finishReason ? `Empty response (${data.candidates[0].finishReason})` : 'Empty response'; continue; }
     return extractJson(text);
   }
   throw new Error(lastErr);
@@ -880,7 +928,7 @@ async function analyzePhotos(section = '', list = null, opts = {}) {
   const st = section ? $(`[data-status="${section}"]`) : $('#aiStatus');
   const btn = $('#analyzeBtn');
   const engine = activeEngine();
-  if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
+  if (!engineReady()) { openSettings(); return toast(NO_ENGINE_MSG, 'err'); }
   if (audio.length && engine !== 'gemini') { toast('Audio analysis needs Gemini — using the typed transcript only'); audio = []; }
   const budget = 18e6 - list.reduce((s, p) => s + p.bytes, 0); let acc = 0; audio = audio.filter(c => (acc += c.bytes) < budget); // stay under the 20 MB request limit
   const fields = section ? [...SECTION_BY_ID[section].fields.filter(f => f.ai || f.type === 'likert'), ALL_FIELDS.find(f => f.k === 'ai_observations')] : AI_FIELDS;
@@ -889,7 +937,7 @@ async function analyzePhotos(section = '', list = null, opts = {}) {
   const t0 = performance.now();
   const onStatus = m => setStatus(st, m, '', true);
   try {
-    const fn = engine === 'gemini' ? analyzeGemini : engine === 'openrouter' ? analyzeOpenRouter : analyzeChrome;
+    const fn = engine === 'gemini' ? analyzeGemini : engine === 'openrouter' ? analyzeOpenRouter : engine === 'gemma' ? analyzeGemma : analyzeChrome;
     const out = await fn(fields, list, prompt, onStatus, audio);
     let n = 0;
     if (out && out.interview_transcript && String(out.interview_transcript).trim()) {
@@ -902,7 +950,7 @@ async function analyzePhotos(section = '', list = null, opts = {}) {
       if (!allowed.has(k) || v == null || v === '' || (Array.isArray(v) && !v.length)) return;
       if (setValue(k, v, true)) n++;
     });
-    lastEngine = engine === 'gemini' ? settings.model : engine === 'openrouter' ? 'openrouter:' + settings.orModel : 'chrome-builtin';
+    lastEngine = engine === 'gemini' ? settings.model : engine === 'openrouter' ? 'openrouter:' + settings.orModel : engine === 'gemma' ? 'backend:' + settings.gemmaModel : 'chrome-builtin';
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     const src = [list.length ? `${list.length} photo(s)` : '', audio.length ? `${audio.length} recording(s)` : '', transcript && !audio.length ? 'the transcript' : ''].filter(Boolean).join(' + ');
     setStatus(st, `${n} field${n === 1 ? '' : 's'} filled in ${secs}s from ${src} — highlighted in yellow, please review.`, 'ok');
@@ -954,7 +1002,13 @@ async function submitForm() {
 const REQUIRED_BACKEND = 1.14;
 const DRIVE_HELP = 'Drive is not authorised for the backend. In the Apps Script editor pick the function "authorizeDrive", click Run and allow access, then Deploy > Manage deployments > Edit > New version. Then retry.';
 const friendlyErr = m => /permission to call DriveApp|DRIVE_NOT_AUTHORIZED|drive\.readonly/i.test(String(m)) ? DRIVE_HELP : String(m);
-function noteBackend(j) { if (j && j.folderUrl) { settings.folderUrl = j.folderUrl; LS.set('gs_settings', settings); } if (j && j.version) settings.backendVersion = j.version; }
+function noteBackend(j) {
+  if (!j) return;
+  if (j.folderUrl) settings.folderUrl = j.folderUrl;
+  if (j.version) settings.backendVersion = j.version;
+  if (typeof j.ai === 'boolean' && j.ai !== settings.backendAI) { settings.backendAI = j.ai; updateEngineChip(); }
+  if (j.folderUrl || typeof j.ai === 'boolean') LS.set('gs_settings', settings);
+}
 /** Verify the database endpoint: backend version, sheet and Drive folder. */
 async function testDatabase() {
   if (!settings.endpoint) throw new Error('No database endpoint set');
@@ -965,7 +1019,17 @@ async function testDatabase() {
   noteBackend(j);
   if (j.driveError) throw new Error(`Backend v${j.version} reached, but Drive access failed. ${friendlyErr(j.driveError)}`);
   if (parseFloat(j.version) < REQUIRED_BACKEND) return `Backend v${j.version} (older than ${REQUIRED_BACKEND} — please deploy the latest Code.gs as a new version) · ${j.rows} rows · Drive folder "${j.folderName}" ready`;
-  return `Backend v${j.version} OK · ${j.rows} rows in the sheet · Drive folder "${j.folderName}" ready`;
+  const ai = j.ai ? ` · Gemma 4 enabled for the team (${j.aiModel})` : typeof j.ai === 'boolean' ? ' · Gemma 4 off (no AI_KEY in Code.gs)' : '';
+  return `Backend v${j.version} OK · ${j.rows} rows in the sheet · Drive folder "${j.folderName}" ready${ai}`;
+}
+/** Adopt a newer team questionnaire and learn whether the backend serves Gemma 4. */
+function probeBackend() {
+  if (!settings.endpoint || !navigator.onLine) return;
+  fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=schema').then(r => r.json()).then(j => {
+    if (!j.ok) return;
+    noteBackend(j);
+    if (j.schema && j.schema.version > (LS.get('gs_schema', { version: 0 }).version || 0)) { LS.set('gs_schema', j.schema); applySchema(j.schema); toast('Questionnaire updated to the team version', 'ok'); }
+  }).catch(() => {});
 }
 async function sendRecord(rec) {
   const { status, error, ...payload } = rec;
@@ -1125,7 +1189,7 @@ function renderAdmin() {
 const KNOWN_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-2.5-flash'];
 function openSettings() {
   $('#setEngine').value = settings.engine; $('#setKey').value = settings.geminiKey;
-  $('#setOrKey').value = settings.orKey; $('#setOrModel').value = settings.orModel;
+  $('#setOrKey').value = settings.orKey; $('#setOrModel').value = settings.orModel; $('#setGemmaModel').value = settings.gemmaModel;
   const known = KNOWN_MODELS.includes(settings.model);
   $('#setModel').value = known ? settings.model : 'custom'; $('#setModelCustom').hidden = known; $('#setModelCustom').value = known ? '' : settings.model;
   $('#setEndpoint').value = settings.endpoint; $('#setSurveyor').value = settings.surveyor;
@@ -1133,18 +1197,22 @@ function openSettings() {
   $('#settingsDlg').showModal();
 }
 function saveSettings(quiet = false) {
-  const modelSel = $('#setModel').value;
+  const modelSel = $('#setModel').value; const prev = settings;
   settings = {
     engine: $('#setEngine').value, geminiKey: $('#setKey').value.trim(),
     model: modelSel === 'custom' ? ($('#setModelCustom').value.trim() || DEFAULT_SETTINGS.model) : modelSel,
     orKey: $('#setOrKey').value.trim(), orModel: $('#setOrModel').value.trim() || DEFAULT_SETTINGS.orModel,
+    gemmaModel: $('#setGemmaModel').value || DEFAULT_SETTINGS.gemmaModel,
     endpoint: $('#setEndpoint').value.trim(), surveyor: $('#setSurveyor').value.trim(),
     maxDim: +$('#setMaxDim').value, recLang: $('#setRecLang').value, stamp: $('#setStamp').checked, uploadPhotos: $('#setUploadPhotos').checked, sampleTools: $('#setSampleTools').checked,
     folderUrl: settings.folderUrl || '',
   };
+  // What we know about the backend only holds while the endpoint is unchanged
+  if (settings.endpoint === prev.endpoint) { settings.backendAI = prev.backendAI; settings.backendVersion = prev.backendVersion; }
   if (quiet) return; // dry run for the connection test
   LS.set('gs_settings', settings);
   if (!getValue('surveyor') && settings.surveyor) setValue('surveyor', settings.surveyor);
+  if (settings.endpoint !== prev.endpoint) probeBackend();
   updateEngineChip(); toast('Settings saved', 'ok');
   if (typeof Analysis !== 'undefined') Analysis.schedule();
 }
@@ -1175,16 +1243,14 @@ function init() {
   $('#obDesign').onclick = () => { showView('editView'); if (typeof Designer !== 'undefined') Designer.startBlank(); };
   $('#obSample').onclick = useSampleQuestionnaire;
   $('#obUpload').onclick = () => { showView('editView'); $('#designerFile').click(); };
-  // Team questionnaire: adopt a newer schema published through the backend
-  if (settings.endpoint && navigator.onLine) fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + 'action=schema').then(r => r.json()).then(j => {
-    if (j.ok && j.schema && j.schema.version > (LS.get('gs_schema', { version: 0 }).version || 0)) { LS.set('gs_schema', j.schema); applySchema(j.schema); toast('Questionnaire updated to the team version', 'ok'); }
-  }).catch(() => {});
+  probeBackend();
   $('#settingsBtn').onclick = openSettings;
   $('#setModel').onchange = e => { $('#setModelCustom').hidden = e.target.value !== 'custom'; };
   $('#testAiBtn').onclick = async e => {
     e.preventDefault(); const st = $('#testAiStatus'); const saved = settings;
     saveSettings(true); setStatus(st, 'Testing…', '', true);
-    try { setStatus(st, await testConnection(), 'ok'); } catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); } finally { settings = saved; }
+    try { setStatus(st, await testConnection(), 'ok'); } catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
+    finally { if (settings.endpoint === saved.endpoint) { saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; } settings = saved; LS.set('gs_settings', saved); updateEngineChip(); }
   };
   $('#settingsDlg').addEventListener('close', () => { if ($('#settingsDlg').returnValue === 'save') saveSettings(); });
   $('#photoDlgClose').onclick = () => $('#photoDlg').close();
@@ -1200,9 +1266,9 @@ function init() {
   $('#uploadFilesBtn').onclick = uploadMissingFiles;
   $('#testDbBtn').onclick = async e => {
     e.preventDefault(); const st = $('#testDbStatus'); const saved = settings; saveSettings(true); setStatus(st, 'Checking…', '', true);
-    try { const msg = await testDatabase(); saved.folderUrl = settings.folderUrl; LS.set('gs_settings', saved); st.className = 'status ok'; st.innerHTML = esc(msg) + (settings.folderUrl ? ` · <a href="${esc(settings.folderUrl)}" target="_blank" rel="noopener">open Drive folder</a>` : ''); }
+    try { const msg = await testDatabase(); saved.folderUrl = settings.folderUrl; saved.backendAI = settings.backendAI; saved.backendVersion = settings.backendVersion; LS.set('gs_settings', saved); st.className = 'status ok'; st.innerHTML = esc(msg) + (settings.folderUrl ? ` · <a href="${esc(settings.folderUrl)}" target="_blank" rel="noopener">open Drive folder</a>` : ''); }
     catch (err) { setStatus(st, 'Failed: ' + err.message, 'err'); }
-    finally { settings = saved; }
+    finally { settings = saved; updateEngineChip(); }
   };
   $('#exportCsvBtn').onclick = () => Exports.csv(getRecords());
   $('#exportJsonBtn').onclick = () => Exports.json(getRecords());
@@ -1229,7 +1295,7 @@ function init() {
   window.addEventListener('offline', offline);
   offline();
 
-  if (!engineReady()) setTimeout(() => toast('Tip: add a Gemini or OpenRouter API key in Settings to enable photo auto-fill'), 800);
+  if (!engineReady()) setTimeout(() => toast('Tip: photo auto-fill needs an API key in Settings, or a database backend with Gemma 4 enabled by your admin'), 800);
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
     // When an updated service worker takes over, reload once so HTML and scripts never mix versions

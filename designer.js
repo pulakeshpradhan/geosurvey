@@ -3,7 +3,7 @@
  * drag-and-drop ordering, floating toolbar, section cards, autosaved draft, AI draft from an uploaded PDF / photos,
  * Approve & apply (device) / Approve & publish (team via backend).
  * Depends on app.js globals: LOCATION_FIELDS, DEFAULT_SCHEMA, FIELD_TYPES, LIKERT, applySchema, currentSchema, deriveConstructs,
- * deriveModel, clone, LS, settings, activeEngine, engineReady, openSettings, geminiCall, GEMINI_FALLBACK, extractJson,
+ * deriveModel, clone, LS, settings, activeEngine, engineReady, openSettings, geminiCall, gemmaCall, GEMINI_FALLBACK, GEMMA_FATAL, NO_ENGINE_MSG, extractJson,
  * compressImage, canvasToDataUrl, adminToken, publishSchema, download, toast, setStatus, esc, $, $$. */
 'use strict';
 
@@ -292,13 +292,21 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
       if (r.error) throw new Error(r.error.message);
       return extractJson(r.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || '');
     }
+    if (activeEngine() === 'gemma') {
+      const contents = [{ role: 'user', parts: [{ text: prompt }, ...images.map(p => ({ inline_data: { mime_type: 'image/jpeg', data: p.dataUrl.split(',')[1] } }))] }];
+      let r = await gemmaCall(settings.gemmaModel, { contents, generationConfig: { responseMimeType: 'application/json', responseSchema: AI_SCHEMA, temperature, maxOutputTokens: 16000 } });
+      if (r.error && !GEMMA_FATAL.test(r.error.message)) r = await gemmaCall(settings.gemmaModel, { contents, generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: 16000 } });
+      if (r.error && !GEMMA_FATAL.test(r.error.message)) r = await gemmaCall(settings.gemmaModel, { contents, generationConfig: { temperature, maxOutputTokens: 16000 } });
+      if (r.error) throw new Error(r.error.message);
+      return extractJson(r.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || '');
+    }
     if (activeEngine() === 'openrouter') {
       const content = [{ type: 'text', text: prompt }, ...images.map(p => ({ type: 'image_url', image_url: { url: p.dataUrl } }))];
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.orKey}`, 'HTTP-Referer': location.origin, 'X-Title': 'GeoSurvey' }, body: JSON.stringify({ model: settings.orModel, messages: [{ role: 'user', content }], temperature, max_tokens: 12000, response_format: { type: 'json_object' } }) });
       const j = await r.json(); if (j.error) throw new Error(j.error.message);
       const c = j.choices?.[0]?.message?.content; return extractJson(typeof c === 'string' ? c : (c || []).map(t => t.text || '').join(''));
     }
-    throw new Error('Questionnaire conversion needs Gemini or OpenRouter');
+    throw new Error('Questionnaire conversion needs Gemini, OpenRouter or Gemma 4 via the backend');
   }
   function adoptAI(out, mode) {
     if (!Array.isArray(out.sections) || !out.sections.length) throw new Error('AI returned no sections');
@@ -316,7 +324,7 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
   }
   async function aiConvert() {
     if (!pages.length) return toast('Upload the questionnaire pages first');
-    if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
+    if (!engineReady()) { openSettings(); return toast(NO_ENGINE_MSG, 'err'); }
     const st = $('#designerStatus'); $('#designerAiBtn').disabled = true;
     setStatus(st, `Transcribing ${pages.length} page(s) exactly as printed…`, '', true);
     try { adoptAI(await askAI(CONVERT_PROMPT(), pages, 0), 'convert'); }
@@ -325,7 +333,7 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
   }
   async function aiImprove() {
     if (!draft.sections.length) return toast('Nothing to improve yet — design, load or convert a questionnaire first');
-    if (!engineReady()) { openSettings(); return toast('Add a Gemini or OpenRouter API key in Settings first', 'err'); }
+    if (!engineReady()) { openSettings(); return toast(NO_ENGINE_MSG, 'err'); }
     const instr = prompt('Optional instructions for the AI (e.g. "add questions on migration and debt", "shorten the wording", "make all scales 1–7"). Leave empty for a general improvement.', '');
     if (instr === null) return;
     const st = $('#designerStatus'); $('#designerImproveBtn').disabled = true;

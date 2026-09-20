@@ -20,9 +20,16 @@
  * Stamped photos and interview recordings are saved to the Drive folder PHOTO_FOLDER; links go to "photo_urls" / "audio_urls".
  * Duplicate submission ids (offline re-sync) are ignored. Re-deploy after editing this file
  * (Deploy → Manage deployments → Edit → Version: New).
+ *
+ * OPTIONAL — GEMMA 4 PHOTO ANALYSIS FOR THE WHOLE TEAM (enumerators need no key on their phones)
+ *  Get one free key at https://aistudio.google.com/app/apikey, paste it into AI_KEY below (or add a Script
+ *  Property named AI_KEY under Project Settings), then deploy a NEW VERSION. Phones then pick
+ *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.14.1';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.15.0';                    // reported to the app (Settings → Test database)
+var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
+var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
 /**
  * ONE-TIME DRIVE AUTHORISATION (needed once per script):
@@ -98,12 +105,33 @@ function savePhotos_(id, photos, kind) {
   return urls;
 }
 
-/** POST: new submission (JSON body), or admin action {action:'delete', id, token}. */
+function aiKey_() {
+  var k = AI_KEY; try { k = PropertiesService.getScriptProperties().getProperty('AI_KEY') || k; } catch (e) {}
+  return String(k || '').trim();
+}
+/** {action:'ai', model, body}: forward a generateContent request to Google with the shared key. Gemma models only. */
+function aiProxy_(data) {
+  var key = aiKey_();
+  if (!key) return json_({ ok: false, error: 'AI_NOT_CONFIGURED', version: BACKEND_VERSION });
+  var model = String(data.model || AI_MODEL);
+  if (!/^gemma-[\w.-]+$/.test(model)) return json_({ ok: false, error: 'This backend only serves Gemma models', version: BACKEND_VERSION });
+  var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+    method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, payload: JSON.stringify(data.body || {}), muteHttpExceptions: true });
+  var text = r.getContentText(), j;
+  try { j = JSON.parse(text); } catch (e) { j = { error: { message: 'HTTP ' + r.getResponseCode() + ': ' + text.slice(0, 200) } }; }
+  if (r.getResponseCode() >= 400 && !j.error) j.error = { message: 'HTTP ' + r.getResponseCode() };
+  j.ok = !j.error; j.version = BACKEND_VERSION;
+  return json_(j);
+}
+
+/** POST: new submission (JSON body), AI request {action:'ai'}, or admin action {action:'delete', id, token}. */
 function doPost(e) {
+  var data;
+  try { data = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Bad JSON' }); }
+  if (data.action === 'ai') { try { return aiProxy_(data); } catch (err) { return json_({ ok: false, error: String(err), version: BACKEND_VERSION }); } } // no lock: slow and independent of the sheet
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var data = JSON.parse(e.postData.contents);
     if (data.action === 'attach') return attachFiles_(data); // (re)upload files for an existing row — no token needed
     if (data.action) return adminAction_(data);
 
@@ -147,10 +175,10 @@ function doPost(e) {
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
-    if (p.action === 'schema') { var js = getConfig_('schema'); return json_({ ok: true, schema: js ? JSON.parse(js) : null }); }
+    if (p.action === 'schema') { var js = getConfig_('schema'); return json_({ ok: true, schema: js ? JSON.parse(js) : null, ai: !!aiKey_(), aiModel: AI_MODEL, version: BACKEND_VERSION }); }
     if (p.action === 'ping') { // health check: version, sheet, Drive folder (created if missing)
       var fu = '', ferr = ''; try { fu = folder_().getUrl(); } catch (e0) { ferr = /permission/i.test(String(e0)) ? 'DRIVE_NOT_AUTHORIZED' : String(e0); }
-      return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: Math.max(0, getSheet_().getLastRow() - 1) });
+      return json_({ ok: true, version: BACKEND_VERSION, sheetUrl: ss_().getUrl(), folderUrl: fu, folderName: PHOTO_FOLDER, driveError: ferr, rows: Math.max(0, getSheet_().getLastRow() - 1), ai: !!aiKey_(), aiModel: AI_MODEL });
     }
     var sh = getSheet_();
     var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
