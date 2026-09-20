@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.15.8">
+  <link rel="stylesheet" href="styles.css?v=1.15.9">
 </head>
 <body>
   <header class="topbar">
@@ -89,7 +89,7 @@
           <div><span class="step">01</span><h2>Location</h2></div>
           <button id="locateBtn" class="btn btn-outline btn-sm" title="Re-acquire a precise GPS fix">⟳ Refresh</button>
         </div>
-        <p class="lock-note">Location is detected automatically and refined to a precise GPS fix (like delivery apps); coordinates, date and address cannot be edited — only the enumerator name is typed.</p>
+        <p class="lock-note">Location is detected automatically and refined to a precise GPS fix; coordinates and date are locked. The address below is looked up from the map — correct the village, block or PIN if the lookup got it wrong.</p>
         <div id="locStatus" class="status"></div>
         <div class="grid" id="locFields"></div>
       </div>
@@ -320,24 +320,28 @@
 
   <!-- First-visit welcome -->
   <dialog id="welcomeDlg" class="welcome-dlg">
-    <div class="dlg">
-      <h2>Welcome to GeoSurvey</h2>
-      <p class="sub">A field-survey app built for household work. What it does that Google Forms and KoboToolbox don't:</p>
-      <div class="table-wrap"><table class="cmp">
-        <thead><tr><th></th><th>GeoSurvey</th><th>Google Forms</th><th>KoboToolbox</th></tr></thead>
-        <tbody>
-          <tr><td>AI fills the form from photos and voice, in any Indian language</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="no" data-l="Kobo">–</td></tr>
-          <tr><td>Converts a paper questionnaire (PDF or photos) into a digital form</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="no" data-l="Kobo">–</td></tr>
-          <tr><td>Precise GPS and address captured automatically; photos stamped with time and place</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="part" data-l="Kobo">GPS only</td></tr>
-          <tr><td>Works offline, syncs later</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="yes" data-l="Kobo">✓</td></tr>
-          <tr><td>Data stays in your own Google Sheet and Drive</td><td class="yes" data-l="GeoSurvey">✓</td><td class="part" data-l="Forms">Sheet only</td><td class="no" data-l="Kobo">Kobo server</td></tr>
-          <tr><td>Statistics, reliability, factor analysis, SEM and a written report built in</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="part" data-l="Kobo">basic</td></tr>
-          <tr><td>SPSS (.sav), KMZ map and A4 PDF exports</td><td class="yes" data-l="GeoSurvey">✓</td><td class="part" data-l="Forms">CSV</td><td class="part" data-l="Kobo">CSV / XLS</td></tr>
-          <tr><td>Nothing to install, no account for enumerators, free</td><td class="yes" data-l="GeoSurvey">✓</td><td class="yes" data-l="Forms">✓</td><td class="part" data-l="Kobo">app + account</td></tr>
-        </tbody>
-      </table></div>
-      <p class="sub">To begin: scan your team's QR code, or tap ⚙️ and paste the database link. Tap outside this box to close it.</p>
-      <div class="btn-row end"><button type="button" id="welcomeClose" class="btn btn-primary">Get started</button></div>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <symbol id="i-yes" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#2f6b4f"/><path d="M6 10.5l2.6 2.6L14.2 7.4" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-no" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ebe8df"/><path d="M7 7l6 6M13 7l-6 6" stroke="#8d8f95" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-part" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#f6edda"/><path d="M6 10h8" stroke="#8a5a1c" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    </svg>
+    <div class="welcome">
+      <div class="welcome-head"><img src="icon.svg" alt="" width="30" height="30"><div><h2>GeoSurvey</h2><p>Field surveys, done differently.</p></div></div>
+      <div class="cmp">
+        <div class="cmp-h"></div><div class="cmp-h geo">Geo<br>Survey</div><div class="cmp-h" title="Google Forms">Forms</div><div class="cmp-h" title="KoboToolbox">Kobo</div>
+        <div>AI fills the form from photos &amp; voice</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-no"/></svg>
+        <div>Paper questionnaire → digital, by AI</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-no"/></svg>
+        <div>Auto GPS, address &amp; stamped photos</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic" title="GPS only"><use href="#i-part"/></svg>
+        <div>Works offline</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic"><use href="#i-yes"/></svg>
+        <div>Data in your own Google Sheet &amp; Drive</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic" title="Sheet only"><use href="#i-part"/></svg><svg class="ic"><use href="#i-no"/></svg>
+        <div>Statistics, SEM &amp; report built in</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-no"/></svg><svg class="ic" title="Basic"><use href="#i-part"/></svg>
+        <div>SPSS · KMZ · PDF export</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic" title="CSV only"><use href="#i-part"/></svg><svg class="ic" title="CSV / XLS"><use href="#i-part"/></svg>
+        <div>No install, no account, free</div><svg class="ic"><use href="#i-yes"/></svg><svg class="ic"><use href="#i-yes"/></svg><svg class="ic" title="App + account"><use href="#i-part"/></svg>
+      </div>
+      <div class="welcome-foot">
+        <a class="credit" href="https://pulakeshpradhan.github.io/" target="_blank" rel="noopener">Created by <b>Pulakesh Pradhan</b></a>
+        <button type="button" id="welcomeClose" class="btn btn-primary btn-sm" autofocus>Get started</button>
+      </div>
     </div>
   </dialog>
 
@@ -367,13 +371,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.15.8"></script>
-  <script src="qr.js?v=1.15.8"></script>
-  <script src="app.js?v=1.15.8"></script>
-  <script src="sav.js?v=1.15.8"></script>
-  <script src="exports.js?v=1.15.8"></script>
-  <script src="analysis.js?v=1.15.8"></script>
-  <script src="pdf.js?v=1.15.8"></script>
-  <script src="designer.js?v=1.15.8"></script>
+  <script src="config.js?v=1.15.9"></script>
+  <script src="qr.js?v=1.15.9"></script>
+  <script src="app.js?v=1.15.9"></script>
+  <script src="sav.js?v=1.15.9"></script>
+  <script src="exports.js?v=1.15.9"></script>
+  <script src="analysis.js?v=1.15.9"></script>
+  <script src="pdf.js?v=1.15.9"></script>
+  <script src="designer.js?v=1.15.9"></script>
 </body>
 </html>

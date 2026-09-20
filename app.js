@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.8';
+const APP_VERSION = '1.15.9';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -24,13 +24,13 @@ let LOCATION_FIELDS = [
   { k: 'longitude', label: 'Longitude', type: 'text', ro: true },
   { k: 'gps_accuracy_m', label: 'GPS accuracy (m)', type: 'text', ro: true },
   { k: 'altitude_m', label: 'Altitude (m)', type: 'text', ro: true },
-  { k: 'village', label: 'Village / Locality', type: 'text', ro: true },
-  { k: 'postcode', label: 'PIN / Postal code', type: 'text', ro: true },
-  { k: 'block', label: 'Block / Tehsil / Sub-district', type: 'text', ro: true },
-  { k: 'district', label: 'District', type: 'text', ro: true },
-  { k: 'state', label: 'State / Province', type: 'text', ro: true },
-  { k: 'country', label: 'Country', type: 'text', ro: true },
-  { k: 'full_address', label: 'Full address (from map)', type: 'textarea', wide: true, ro: true },
+  { k: 'village', label: 'Village / Locality', type: 'text', auto: true },
+  { k: 'postcode', label: 'PIN / Postal code', type: 'text', auto: true },
+  { k: 'block', label: 'Block / Tehsil / Sub-district', type: 'text', auto: true },
+  { k: 'district', label: 'District', type: 'text', auto: true },
+  { k: 'state', label: 'State / Province', type: 'text', auto: true },
+  { k: 'country', label: 'Country', type: 'text', auto: true },
+  { k: 'full_address', label: 'Full address (from map)', type: 'textarea', wide: true, auto: true },
 ];
 
 let SECTIONS = [
@@ -445,7 +445,7 @@ function clearForm() {
   autoLocate(true); // next household: fresh precise fix
 }
 function updateProgress() {
-  const fields = ALL_FIELDS.filter(f => !f.ro && !['ai_observations', 'remarks', 'full_address'].includes(f.k));
+  const fields = ALL_FIELDS.filter(f => !f.ro && !f.auto && !['ai_observations', 'remarks'].includes(f.k));
   const filled = f => { const v = getValue(f.k); return Array.isArray(v) ? v.length > 0 : v !== ''; };
   const done = fields.filter(filled).length;
   const pct = fields.length ? Math.round(done / fields.length * 100) : 0;
@@ -1434,7 +1434,7 @@ function init() {
   $('#setEndpoint').addEventListener('input', updateEndpointHint);
   // First visit only: what GeoSurvey adds over ordinary survey tools. Tapping the backdrop closes it.
   const welcome = $('#welcomeDlg');
-  const welcomeDone = () => { if (welcome.open) welcome.close(); LS.set('gs_welcomed', APP_VERSION); };
+  const welcomeDone = () => { LS.set('gs_welcomed', APP_VERSION); if (!welcome.open || welcome.classList.contains('closing')) return; welcome.classList.add('closing'); setTimeout(() => { welcome.close(); welcome.classList.remove('closing'); }, 160); };
   $('#welcomeClose').onclick = welcomeDone;
   welcome.addEventListener('click', e => { if (e.target === welcome) welcomeDone(); });
   welcome.addEventListener('close', () => LS.set('gs_welcomed', APP_VERSION));
