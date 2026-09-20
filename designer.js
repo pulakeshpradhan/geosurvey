@@ -3,7 +3,7 @@
  * drag-and-drop ordering, floating toolbar, section cards, autosaved draft, AI draft from an uploaded PDF / photos,
  * Approve & apply (device) / Approve & publish (team via backend).
  * Depends on app.js globals: LOCATION_FIELDS, DEFAULT_SCHEMA, FIELD_TYPES, LIKERT, applySchema, currentSchema, deriveConstructs,
- * deriveModel, clone, LS, settings, activeEngine, engineReady, openSettings, geminiCall, gemmaCall, GEMINI_FALLBACK, GEMMA_FATAL, NO_ENGINE_MSG, extractJson,
+ * deriveModel, clone, LS, settings, activeEngine, engineReady, openSettings, showView, geminiCall, gemmaCall, GEMINI_FALLBACK, GEMMA_FATAL, NO_ENGINE_MSG, extractJson,
  * askTeamKey, backupProject, downloadProject, parseProjectFile, adoptSchema, rowsInSheet, chooseResponseSheet, fetchQuestionnaire, setDefaultQuestionnaire, deleteQuestionnaire,
  * compressImage, canvasToDataUrl, adminToken, publishSchema, download, toast, setStatus, esc, $, $$. */
 'use strict';
@@ -347,6 +347,18 @@ const Designer = (() => {
 ${SCHEMA_RULES}
 EXISTING questionnaire keys you may reuse when a question matches exactly (JSON):
 ${JSON.stringify({ sections: draft.sections.map(s => ({ title: s.title, fields: s.fields.map(f => ({ key: f.k, label: f.label })) })) })}`;
+  const DESIGN_PROMPT = brief => `You are a survey-methodology expert. Design a COMPLETE, field-ready questionnaire from this brief:
+<<<
+${brief}
+>>>
+Requirements: a clear title; 4–8 logically ordered sections that cover the brief fully (identification/respondent basics first, then the topic areas, perceptions last); 5–12 questions per section; neutral, unambiguous wording suitable for enumerator-led interviews in India; complete and mutually exclusive answer options (include "Other" where sensible); numeric fields for counts/amounts; select for single choice, multi for tick-all-that-apply; for attitudes/perceptions use likert statements grouped into constructs of 3–6 statements each (same construct code, scale_max 5, scale_low "Strongly disagree", scale_high "Strongly agree" unless the brief says otherwise); a photoHint per section describing what to photograph; mark identification fields required. If the brief already lists questions, keep them and complete around them. Answer in English.
+${SCHEMA_RULES}`;
+  const TEXT_FORMAT_PROMPT = text => `You are converting the TEXT of a questionnaire into a digital form. TRANSCRIBE IT FAITHFULLY: keep every question, its exact wording, its numbering order, every answer option with its exact text, section headings, instructions and scale end labels exactly as written. Do NOT add, merge, drop, reorder or reword anything; do not invent options. Only choose the closest field type for each question and group questions under the headings given (one section if there are none).
+${SCHEMA_RULES}
+QUESTIONNAIRE TEXT:
+<<<
+${text}
+>>>`;
   const IMPROVE_PROMPT = instr => `You are a survey-methodology expert improving a household socio-economic questionnaire. Return an improved version of the CURRENT questionnaire below: clear, neutral, unambiguous wording; complete and mutually exclusive answer options; sensible field types; logical section order; consistent rating scales; add commonly needed questions only where a gap is obvious; keep everything that already works. Keep existing keys for questions you keep (even if reworded).${instr ? `\n\nSPECIFIC INSTRUCTIONS FROM THE USER (follow these first): ${instr}` : ''}
 ${SCHEMA_RULES}
 CURRENT questionnaire (JSON):
@@ -387,8 +399,11 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
       return q; }) }));
     draft = { ...draft, title: out.title || draft.title, sections }; active = null; persist(); render();
     const nq = sections.reduce((n, s) => n + s.fields.length, 0);
-    setStatus($('#designerStatus'), mode === 'convert' ? `Converted ${pages.length} page(s) into ${sections.length} sections / ${nq} questions, as printed. Check it against the original, then Apply.` : `Improved draft: ${sections.length} sections / ${nq} questions. Review, then Apply.`, 'ok');
-    toast(mode === 'convert' ? 'Questionnaire converted — please verify against the original' : 'Improved questionnaire ready for review', 'ok');
+    const msg = mode === 'convert' ? `Converted ${pages.length ? pages.length + ' page(s)' : 'the text'} into ${sections.length} sections / ${nq} questions, as written. Check it against the original, then Apply.`
+      : mode === 'design' ? `Designed ${sections.length} sections / ${nq} questions from your description. Review the wording and options, then Apply or Publish.`
+      : `Improved draft: ${sections.length} sections / ${nq} questions. Review, then Apply.`;
+    setStatus($('#designerStatus'), msg, 'ok');
+    toast(mode === 'convert' ? 'Questionnaire converted — please verify against the original' : mode === 'design' ? 'Questionnaire designed — review it, then Apply or Publish' : 'Improved questionnaire ready for review', 'ok');
     $('#designerBody').scrollIntoView({ behavior: 'smooth' });
   }
   async function aiConvert() {
@@ -399,6 +414,28 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
     try { adoptAI(await askAI(CONVERT_PROMPT(), pages, 0), 'convert'); }
     catch (e) { setStatus(st, 'AI error: ' + e.message, 'err'); toast('AI error: ' + e.message, 'err'); }
     finally { $('#designerAiBtn').disabled = !pages.length; }
+  }
+  /* ---------- Design with AI: one-line brief → full questionnaire, or pasted text → formatted as written ---------- */
+  const looksLikeQuestionnaire = t => t.length > 500 || (t.match(/^\s*(\d+[.)]|Q\d+|[a-z][.)])\s+/gim) || []).length >= 4;
+  function aiDesignOpen() {
+    if (!engineReady()) { openSettings(); return toast(NO_ENGINE_MSG, 'err'); }
+    const dlg = $('#aiDesignDlg'); $('#aiDesignText').value = ''; $$('input[name="aiDesignMode"]').forEach(r => r.checked = r.value === 'auto'); setStatus($('#aiDesignStatus'), '');
+    dlg.returnValue = ''; dlg.showModal(); setTimeout(() => $('#aiDesignText').focus(), 50);
+  }
+  async function aiDesignRun() {
+    const text = $('#aiDesignText').value.trim(); if (!text) return toast('Type a description or paste the questionnaire text first');
+    let mode = $('input[name="aiDesignMode"]:checked')?.value || 'auto'; if (mode === 'auto') mode = looksLikeQuestionnaire(text) ? 'format' : 'design';
+    if (draft.sections.some(s => s.fields.length) && !confirm('Replace the current draft with the AI result? (You can still Discard afterwards.)')) return;
+    const st = $('#aiDesignStatus'), btn = $('#aiDesignRun'); btn.disabled = true;
+    setStatus(st, mode === 'format' ? 'Formatting the pasted questionnaire exactly as written…' : 'Designing the complete questionnaire from your description…', '', true);
+    try {
+      const out = await askAI(mode === 'format' ? TEXT_FORMAT_PROMPT(text) : DESIGN_PROMPT(text), [], mode === 'format' ? 0 : 0.4);
+      const keep = { qid: draft.qid, sheet: draft.sheet };
+      adoptAI(out, mode === 'format' ? 'convert' : 'design'); draft.qid = keep.qid; draft.sheet = keep.sheet; persist(); renderQBar();
+      $('#aiDesignDlg').close();
+      if (!$('#editView') || $('#editView').hidden) showView('editView');
+    } catch (e) { setStatus(st, 'AI error: ' + e.message, 'err'); }
+    finally { btn.disabled = false; }
   }
   async function aiImprove() {
     if (!draft.sections.length) return toast('Nothing to improve yet — design, load or convert a questionnaire first');
@@ -421,6 +458,10 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
     $('#designerModel').addEventListener('input', onInput);
     $('#designerFile').onchange = e => { intake([...e.target.files]); e.target.value = ''; };
     $('#designerAiBtn').onclick = aiConvert;
+    $('#designerTextAiBtn').onclick = aiDesignOpen;
+    $('#aiDesignRun').onclick = aiDesignRun;
+    $('#aiDesignCancel').onclick = () => $('#aiDesignDlg').close('cancel');
+    $('#aiDesignText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); aiDesignRun(); } });
     $('#qPick').onchange = e => pickQuestionnaire(e.target.value);
     $('#qNew').onclick = newQuestionnaire;
     $('#qDefault').onclick = makeDefault;
@@ -437,5 +478,5 @@ ${JSON.stringify({ title: draft.title, sections: draft.sections.map(s => ({ titl
     $('#designerDiscard').onclick = discard;
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { open, load, approve, startBlank, loadSample, aiConvert, aiImprove };
+  return { open, load, approve, startBlank, loadSample, aiConvert, aiImprove, aiDesignOpen };
 })();

@@ -312,6 +312,9 @@ small.hint-team { color: var(--accent); background: var(--accent-soft); border-r
 @media (max-width: 400px) { .cmp .row { grid-template-columns: 1fr 38px 38px 38px; } .cmp { font-size: 12.5px; } .welcome { padding: 16px 14px 12px; } }
 .qr-dlg { width: min(420px, 94vw); }
 .sheet-dlg { width: min(520px, 94vw); }
+.aidesign-dlg { width: min(600px, 94vw); }
+.aidesign-dlg textarea { min-height: 150px; font-size: 13.5px; resize: vertical; }
+.aidesign-dlg .radios { margin-top: 2px; }
 .qbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; }
 .qbar-pick { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .qbar-pick select { width: min(360px, 60vw); }

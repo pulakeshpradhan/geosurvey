@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.17.0">
+  <link rel="stylesheet" href="styles.css?v=1.17.1">
 </head>
 <body>
   <header class="topbar">
@@ -52,6 +52,7 @@
           <button class="ob-tile" id="obDesign"><span class="ob-ic">✎</span><b>Design your own</b><span>Build sections and questions in a form-style editor.</span></button>
           <button class="ob-tile" id="obSample"><span class="ob-ic">▤</span><b>Use sample questionnaire</b><span>Socio-economic household survey with 5 perception constructs, ready for SEM.</span></button>
           <button class="ob-tile" id="obUpload"><span class="ob-ic">⇪</span><b>Upload paper questionnaire</b><span>PDF or photos — converted exactly as printed; improve with AI afterwards if you wish.</span></button>
+          <button class="ob-tile" id="obAi"><span class="ob-ic">✦</span><b>Design with AI</b><span>Describe the survey in one line — or paste an existing questionnaire as text — and get a complete form.</span></button>
           <label class="ob-tile" id="obProject"><span class="ob-ic">▣</span><b>Open a project file</b><span>A <code>.geosurvey</code> file from your admin — installs the questionnaire and connects this phone to the team database in one go.</span><input type="file" id="projectInput" accept=".geosurvey,application/json" hidden></label>
         </div>
       </div>
@@ -155,6 +156,7 @@
         <div class="gtop-right">
           <label class="gbtn" title="Upload a paper questionnaire (PDF or photos)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>Upload<input type="file" id="designerFile" accept="application/pdf,image/*" multiple hidden></label>
           <button id="designerAiBtn" class="gbtn primary" disabled title="Transcribe the uploaded pages into a questionnaire exactly as printed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>Convert</button>
+          <button id="designerTextAiBtn" class="gbtn primary" title="Describe the survey in one line, or paste a whole questionnaire as text — AI turns it into a complete digital form"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/><path d="M18 14l1.2 2.8L22 18l-2.8 1.2L18 22l-1.2-2.8L14 18l2.8-1.2z"/></svg>Design with AI</button>
           <button id="designerImproveBtn" class="gbtn" title="Improve the current questionnaire with AI (optionally with your instructions)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Improve with AI</button>
           <span class="gsep"></span>
           <button id="designerSample" class="gbtn" title="Load the sample questionnaire">Sample</button>
@@ -397,6 +399,24 @@
     </div>
   </dialog>
 
+  <!-- Design with AI: one-line brief or pasted questionnaire text → complete form -->
+  <dialog id="aiDesignDlg" class="aidesign-dlg">
+    <form method="dialog" class="dlg">
+      <h2>Design with AI</h2>
+      <p class="sub">Type one line about the survey and AI designs the whole questionnaire — or paste an existing questionnaire and AI formats it exactly as written.</p>
+      <textarea id="aiDesignText" class="input" rows="7" placeholder="Examples:
+• Household socio-economic survey for rural West Bengal: housing, water, sanitation, income, assets, health, 5-point perceptions on government schemes
+• Paste here: 1. Name of respondent ____  2. Age ____  3. Main occupation: (a) farming (b) daily wage (c) service (d) other …"></textarea>
+      <div class="radios">
+        <label class="radio"><input type="radio" name="aiDesignMode" value="auto" checked><i></i><span><b>Auto</b><small>A short description is designed from scratch; a pasted questionnaire is formatted as written</small></span></label>
+        <label class="radio"><input type="radio" name="aiDesignMode" value="design"><i></i><span><b>Design from my description</b><small>Complete sections, questions, options and rating scales</small></span></label>
+        <label class="radio"><input type="radio" name="aiDesignMode" value="format"><i></i><span><b>Format the pasted text exactly</b><small>Keep every question, wording, number and option — only choose field types</small></span></label>
+      </div>
+      <span id="aiDesignStatus" class="status"></span>
+      <div class="btn-row end"><button type="button" id="aiDesignCancel" class="btn btn-outline">Cancel</button><button type="button" id="aiDesignRun" class="btn btn-primary">Generate questionnaire</button></div>
+    </form>
+  </dialog>
+
   <!-- Publish: where do responses for the updated questionnaire go? -->
   <dialog id="sheetDlg" class="sheet-dlg">
     <form method="dialog" class="dlg">
@@ -437,13 +457,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.17.0"></script>
-  <script src="qr.js?v=1.17.0"></script>
-  <script src="app.js?v=1.17.0"></script>
-  <script src="sav.js?v=1.17.0"></script>
-  <script src="exports.js?v=1.17.0"></script>
-  <script src="analysis.js?v=1.17.0"></script>
-  <script src="pdf.js?v=1.17.0"></script>
-  <script src="designer.js?v=1.17.0"></script>
+  <script src="config.js?v=1.17.1"></script>
+  <script src="qr.js?v=1.17.1"></script>
+  <script src="app.js?v=1.17.1"></script>
+  <script src="sav.js?v=1.17.1"></script>
+  <script src="exports.js?v=1.17.1"></script>
+  <script src="analysis.js?v=1.17.1"></script>
+  <script src="pdf.js?v=1.17.1"></script>
+  <script src="designer.js?v=1.17.1"></script>
 </body>
 </html>

@@ -59,7 +59,7 @@ The backend now keeps itself current: whenever a newer `Code.gs` is released, th
 
 ## Questionnaire
 
-On first start choose **Use sample**, **Design your own** (Google-Forms-style editor), **Upload paper questionnaire** (PDF or photos, transcribed as printed; *Improve with AI* refines it) or **Open a project file**. Later, use **Edit** → **Apply** (this phone) or **Publish to team** (all phones). Editing the questionnaire requires the team key once a database is connected.
+On first start choose **Use sample**, **Design your own** (Google-Forms-style editor), **Upload paper questionnaire** (PDF or photos, transcribed as printed), **Design with AI** (type one line describing the survey and get a complete questionnaire — or paste an existing questionnaire as text and it is formatted exactly as written; also in Edit) or **Open a project file**. *Improve with AI* in Edit refines any draft. Later, use **Edit** → **Apply** (this phone) or **Publish to team** (all phones). Editing the questionnaire requires the team key once a database is connected.
 
 ### Several questionnaires, one Google Sheet
 

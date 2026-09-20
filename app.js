@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.17.0';
+const APP_VERSION = '1.17.1';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1565,6 +1565,7 @@ function init() {
   $('#obDesign').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); if (typeof Designer !== 'undefined') Designer.startBlank(); };
   $('#obSample').onclick = async () => { if (await requireAdmin(EDIT_WHY)) useSampleQuestionnaire(); };
   $('#obUpload').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); $('#designerFile').click(); };
+  $('#obAi').onclick = async () => { if (!await requireAdmin(EDIT_WHY)) return; showView('editView'); if (typeof Designer !== 'undefined') Designer.aiDesignOpen(); };
   $('#projectInput').onchange = e => { if (e.target.files[0]) openProjectFile(e.target.files[0]); e.target.value = ''; };
   $('#projectDlBtn').onclick = e => { e.preventDefault(); if (!SECTIONS.length) return toast('No questionnaire yet — choose or design one first'); downloadProject(); };
   $('#projectDriveBtn').onclick = e => { e.preventDefault(); saveProjectToDrive(); };
