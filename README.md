@@ -1,119 +1,74 @@
 # GeoSurvey
 
-A free survey app for household / socio-economic field work. It runs in the phone's browser, fills the form for you from **photos and voice recordings** (AI), records the **exact location automatically**, saves everything to **your own Google Sheet and Google Drive**, and gives you **statistics and reports** on the collected data.
+A free survey app for household field work. Runs in the phone browser. Photos and voice fill the form (AI), the location is recorded automatically, and every answer lands in **your own Google Sheet**.
 
 | | |
 |---|---|
 | 📱 **Open the app** | https://pulakeshpradhan.github.io/geosurvey/ |
-| 🖼️ **Setup slides (click by click)** | https://pulakeshpradhan.github.io/geosurvey/guide/ |
-| 📄 **Written guide** | this page (below) |
-| 🔑 **Free AI key** | https://aistudio.google.com/app/apikey |
-| 📊 **Backend code to paste into Google Sheets** | [backend/Code.gs](backend/Code.gs) |
-| 🐞 **Report a problem / ask for a feature** | https://github.com/pulakeshpradhan/geosurvey/issues |
-
-**What it does**
-
-- **Fills the form for you** – take photos (house, kitchen, water source, ID card, filled paper form) or record the interview in any Indian language; the AI writes the transcript and fills the answers in English for you to check.
-- **Knows where you are** – precise GPS location and address are captured automatically; every photo is stamped with time and place.
-- **Your data, your Google account** – one row per household in a Google Sheet, photos and recordings in a Drive folder, offline-safe on the phone until synced.
-- **Your questionnaire** – use the sample, design your own like Google Forms, or upload the paper questionnaire and let the AI convert it; publish it to every phone.
-- **Results built in** – statistics with charts and a plain-language report (reliability, factor analysis, SEM, mediation/moderation); downloads as CSV, SPSS, KMZ and A4 PDF.
-
-Nothing to install. On a phone, open the link in Chrome (Android) or Safari (iPhone) and choose *Add to Home Screen* to use it like an app. It works offline and syncs when internet is back.
+| 🖼️ **Setup slides** | https://pulakeshpradhan.github.io/geosurvey/guide/ |
+| 📄 **Code to paste into Google Sheets** | [backend/Code.gs](backend/Code.gs) and [backend/appsscript.json](backend/appsscript.json) |
+| 🔑 **Free AI key (optional)** | https://aistudio.google.com/app/apikey |
+| 🐞 **Problems / ideas** | https://github.com/pulakeshpradhan/geosurvey/issues |
 
 ---
 
-## Setting up (one time, about 10 minutes)
+## 1. Set up once — the person in charge, on a computer (about 5 minutes)
 
-You need two things: a **free AI key** and a **Google Sheet** to store the answers. Do this once on a computer.
+### A. Make the database (a Google Sheet)
 
-### Step 1 – Get the free AI key (2 minutes)
+1. Open https://sheets.new — a new Google Sheet appears. Give it a name.
+2. Menu **Extensions → Apps Script**. A code page opens.
+3. Delete everything in the code box. Open [backend/Code.gs](backend/Code.gs), copy all of it, paste it there.
+4. Click the **gear** on the left (*Project Settings*). Tick **Show "appsscript.json" manifest file in editor**. Go back to the editor (`< >` icon), click **appsscript.json**, delete its text, paste [backend/appsscript.json](backend/appsscript.json). Press **Ctrl+S**.
+5. Open https://script.google.com/home/usersettings and switch **Google Apps Script API** to **On**. (This lets the code update itself later.)
+6. Back in the editor: in the dropdown next to **▶ Run** choose **`authorizeDrive`**, click **▶ Run**. Click **Review permissions → your account → Advanced → Go to (project name) → Allow**.
+7. **Deploy → New deployment** → gear next to *Select type* → **Web app** → *Execute as:* **Me**, *Who has access:* **Anyone** → **Deploy** → **Copy** the *Web app URL* (ends with `/exec`).
 
-1. Go to https://aistudio.google.com/app/apikey and sign in with your Google account.
-2. Click **Create API key**, then **Copy** the key (it starts with `AIza`).
-3. Keep it safe — you will paste it into the app in Step 3.
+Done. **You never touch this code again** — it updates itself when a new version is released.
 
-### Step 2 – Create the Google Sheet that stores the data (5 minutes)
+### B. Connect the app
 
-1. Go to https://sheets.new to create a new Google Sheet. Give it a name, e.g. *Village Survey 2026*.
-2. In the Sheet menu click **Extensions → Apps Script**. A code page opens.
-3. Delete everything in that page. Open this file: [backend/Code.gs](backend/Code.gs), click the **copy icon** at the top right of the file, and paste it into the code page.
-   Then click the **gear (Project Settings)** on the left, tick **Show "appsscript.json" manifest file in editor**, go back to the editor, open **appsscript.json** and replace its content with [backend/appsscript.json](backend/appsscript.json).
-4. The line `var ADMIN_TOKEN = 'GeoSurvey';` is the **team key**: whoever has it can see everyone's records (*Sync all*), delete rows and publish the questionnaire. Keep `GeoSurvey` for a trial; for a real project replace it with a password of your choice (keep the quotes). Press **Ctrl+S** to save.
-5. **Switch on the Apps Script API** (lets the backend update itself later): open https://script.google.com/home/usersettings and turn **Google Apps Script API** on.
-6. **Allow access:** in the toolbar there is a dropdown that says `myFunction` or `doPost` — change it to **`authorizeDrive`** and click **▶ Run**.
-   Google asks for permission: click **Review permissions → your account → Advanced → Go to (project name) → Allow**.
-   This creates a folder **GeoSurvey Photos** in your Google Drive where photos, recordings and transcripts will be saved.
-7. Click **Deploy → New deployment**. Click the gear icon next to *Select type* and choose **Web app**. Set
-   *Execute as:* **Me**, *Who has access:* **Anyone**. Click **Deploy**, then **Copy** the *Web app URL* (it ends with `/exec`).
+1. Open https://pulakeshpradhan.github.io/geosurvey/ and tap **⚙️** (top right).
+2. Paste the Web app URL into **Database endpoint** → **Test database** (should say *Backend OK*) → **Save**.
+3. Tap the **QR icon** in the top bar. Each enumerator points their phone camera at it — their phone is connected, nothing to type. (Or **Copy link** and send it on WhatsApp.)
 
-> **You never paste Code.gs again.** Whenever a newer version is released, the app asks your backend to update itself (Settings → *Test database* does it immediately; a daily check runs anyway). The backend downloads the latest Code.gs from GitHub, keeps your team key and other settings, saves a new version and re-points the web app — the URL never changes.
->
-> Already running an older backend (v1.15.3 or earlier)? Do steps 3, 5 and 6 once more, then **Deploy → Manage deployments → ✎ → Version: New version → Deploy** for the last time.
+### C. AI photo fill — optional, free
 
-### Step 3 – Put the key and the URL into the app (1 minute)
+**For the whole team at once (recommended):** get a key at https://aistudio.google.com/app/apikey → in the Apps Script code find `var AI_KEY = '';` and paste the key between the quotes → **Ctrl+S** → in the dropdown choose **`updateBackend`** → **▶ Run**. Every connected phone now has *Analyze & fill*.
 
-1. Open https://pulakeshpradhan.github.io/geosurvey/ and tap the **⚙️ (Settings)** icon at the top right.
-2. Paste the AI key into **Gemini API key** and press **Test connection** — it should say *OK*.
-3. Paste the Web app URL into **Database endpoint** and press **Test database** — it should say *Backend OK … Drive folder "GeoSurvey Photos" ready* with a link to the folder.
-4. Type your name under **Enumerator name**, choose the **Interview language**, and press **Save**.
-
-Every enumerator does Step 3 on their own phone with the **same key and the same URL**. All phones then write into the same Sheet.
-
-**Skip the pasting on the phones — two options (either one works, Settings always remains as the manual fallback):**
-
-- **Team link:** in Settings press **Copy team link** (next to *Test database*) and send that link to the enumerators. Opening it once connects the phone to your database; the link is `…/geosurvey/?db=<Web app URL>`.
-- **Built into the app:** if you host your own copy of the app, put the Web app URL into [config.js](config.js) (`endpoint: '…/exec'`). Every phone that opens the app is then connected, and Settings shows *Pre-set by your team*.
-
-Together with the Gemma 4 option below, a phone then needs **nothing at all** in Settings.
-
-### Optional – Gemma 4 for the whole team, no key on the phones
-
-If you would rather not give the AI key to every enumerator, put it in the backend once and let Google's **Gemma 4** model do the photo analysis for everyone:
-
-1. In the Apps Script code from Step 2, find `var AI_KEY = '';` and paste your key between the quotes (or add a Script Property named `AI_KEY` under *Project Settings*). Save.
-2. In the toolbar dropdown pick **`updateBackend`** and click **▶ Run** (publishes the change; no manual deployment needed).
-3. On each phone only the **Database endpoint** is needed (Step 3.3). Settings → **Test database** now says *Gemma 4 enabled for the team*, and *Analyze & fill* works with the provider on **Auto** (or choose *Gemma 4 via database backend* explicitly).
-
-Gemma 4 is served by Google free of charge with rate limits (a few requests per minute per key). It analyses photos and typed transcripts; **voice recordings still need a Gemini key on the phone**. The existing Gemini and OpenRouter options are unchanged and take priority when a key is present.
-
-### Step 4 – Choose your questionnaire (1 minute)
-
-When you open the app the first time it asks how to start:
-
-- **Use sample questionnaire** – a complete household survey (housing, income, water, assets, health, perceptions). Good to start immediately.
-- **Design your own** – build questions like Google Forms.
-- **Upload paper questionnaire** – upload a PDF or photos of your printed questionnaire; the app converts it to a digital form exactly as printed. Then you can press **Improve with AI** to tidy it up.
-
-You can change the questionnaire any time with the **Edit** button (top right). After editing press **Apply** (this phone) or **Publish to team** (all phones get the new questionnaire; needs the team key from Step 2).
+**Or on one phone only:** ⚙️ → paste the key into **Gemini API key** → **Test connection** → **Save**. (Voice recordings need this option.)
 
 ---
 
-## Using it in the field
+## 2. Every day — enumerators
 
-1. **Location** is detected by itself when the form opens (wait for the accuracy to show, e.g. *±8 m*). Nothing to press.
-2. Type the **household head name** and other basics — or let the AI do it:
-   - **Capture photo** (house, kitchen, water source, ID card, filled paper form…) and/or **Record** the interview in any language.
-   - Press **Analyze & fill**. The AI looks at the photos, listens to the recording, writes the transcript and fills the answers in English. Filled answers are shown in **yellow** — check and correct them.
-   - Each section also has its own 📷 (photo), ✨ (fill) and 🎙 (record) buttons. Recording with the section mic fills that section as soon as you stop.
-3. Press **Submit**. The record is saved on the phone and sent to the Sheet (photos, recordings and transcript go to the Drive folder). If there is no internet, it is sent later automatically.
-4. **PDF** (top right) makes a printable A4 copy of the filled form with photos, for signatures or files.
+1. Open the app (tip: *Add to Home Screen* in the browser menu). Wait until the location shows, e.g. *±8 m*.
+2. **Capture photo** (house, kitchen, water source, ID card, filled paper form…), **Record** the interview in any language, or tap **✎** to type notes.
+3. **Analyze & fill** — answers appear in **yellow**. Check and correct them. Fill the rest by hand.
+4. **Submit**. No internet? It is sent automatically later.
 
-Photos come only from the camera (no gallery uploads) and are stamped with time, place and coordinates, so they are proof of the visit.
+**PDF** (top bar) prints the filled form. Photos come only from the camera and are stamped with time and place.
 
 ---
 
-## Where the data goes
+## 3. Where the answers are
 
-- **Answers:** one row per household in your Google Sheet (tab *Responses*).
-- **Photos, recordings, transcripts:** the Drive folder **GeoSurvey Photos**, with links in the Sheet (columns `photo_urls`, `audio_urls`, `transcript_url`).
-- **On the phone:** the *Records* tab keeps a copy of everything until you remove it. The **Files in Drive** column shows whether the files reached Drive; **Upload files** re-sends any that did not.
+- **Records** tab → **Sync**: sends anything waiting and shows *your* records straight from the database (the phone keeps no copy).
+  **Sync all** shows *everyone's* records — it asks once for the **team key** (`GeoSurvey` unless you changed it).
+- **Google Sheet** (tab *Responses*): every answer from every phone. **Google Drive** folder *GeoSurvey Photos*: photos, recordings, transcripts.
+- **Analysis** tab: charts, statistics and a plain-language report on the synced data. **Export** CSV / JSON / SPSS / KMZ from the Records tab.
 
-## Seeing the results
+---
 
-- **Records** tab – **Sync** sends this phone's pending records. **Sync all** additionally pulls **every record submitted by the whole team** — it asks once for the team key (`ADMIN_TOKEN`, default `GeoSurvey`; also in Settings → *Team key*). Rows marked *database* come from other phones and stay visible offline. Without the key a phone only ever sends its own records. Download everything shown as **CSV, JSON, SPSS (.sav)** or **KMZ** (map file for Google Earth).
-- **Analysis** tab – automatic statistics on the team data once synced (tables, charts, reliability, factor analysis, SEM…) with a plain-language report. Press **Download report** for a file you can share.
-- **Edit → Collected data** – the same team key lets you delete a wrong entry or publish the questionnaire to all phones.
+## 4. The questionnaire
+
+- First start: **Use sample**, **Design your own** (like Google Forms), or **Upload paper questionnaire** (PDF or photos — converted as printed; *Improve with AI* tidies it).
+- Change it any time with **Edit** → **Apply** (this phone) or **Publish to team** (all phones; needs the team key).
+
+## 5. The team key
+
+`GeoSurvey` by default. It is needed for **Sync all**, deleting a record (Edit → *Collected data*) and **Publish to team**.
+To change it: in the Apps Script code edit the line `var ADMIN_TOKEN = 'GeoSurvey';` → **Ctrl+S** → run **`updateBackend`**.
 
 ---
 
@@ -121,16 +76,16 @@ Photos come only from the camera (no gallery uploads) and are stamped with time,
 
 | Problem | What to do |
 |---|---|
-| *Analyze & fill* shows an error | Settings → **Test connection**. If it fails, create a new key at https://aistudio.google.com/app/apikey and paste it again. Using Gemma 4 via backend: the message *backend has no AI key* means `AI_KEY` is still empty in Code.gs (after pasting it, run **updateBackend**). |
-| Backend is "older than the app" / "too old to update itself" | Settings → **Test database** normally updates it on the spot. If it says the Apps Script API is off: switch it on at https://script.google.com/home/usersettings. If it says not authorised: paste [backend/appsscript.json](backend/appsscript.json) (Step 2.3) and run **authorizeDrive** once. A backend older than v1.15.4 needs Code.gs pasted one last time (see Step 2). |
-| Message about *permission to call DriveApp* | Step 2.6 was skipped: run **authorizeDrive** in Apps Script and allow access. Then Records → **Upload files**. |
-| Location stays on "Locating…" | Allow location for the site when the phone asks; go outside / near a window. Tap **⟳ Refresh**. |
-| Microphone / camera does not open | Allow microphone and camera for the site in the phone's browser settings. |
-| The app looks old after an update | Close it fully and open it again (or pull down to refresh). |
-| I cannot find the Drive folder | Settings → **Test database** shows a direct link. It is in *My Drive* of the Google account used in Step 2. |
+| *Test database* fails | Check the URL ends with `/exec` and the deployment says *Who has access: Anyone*. |
+| App says the backend is older than the app | ⚙️ → **Test database** updates it. If it says the *Apps Script API is off* → step A5. If *not authorised* → steps A4 and A6. A very old backend needs steps A3–A7 once more. |
+| *Analyze & fill* error | ⚙️ → **Test connection**. *Backend has no AI key* → step C. Make a new key if yours stopped working. |
+| *Permission to call DriveApp* | Step A6 was skipped: run **`authorizeDrive`**. Then Records → **Upload files**. |
+| Location stays on *Locating…* | Allow location for the site; go outside or near a window; tap **⟳ Refresh**. |
+| Camera or microphone will not open | Allow camera and microphone for the site in the phone's browser settings. |
+| The app looks old | Close it completely and open it again. |
 
 ---
 
-## Technical notes (for developers)
+## Technical notes (developers)
 
-Static site (HTML/JS, no build step) hosted on GitHub Pages; backend is a Google Apps Script bound to a Sheet (rows) with Drive for media and a *Config* tab for the published questionnaire. AI: Gemini (`gemini-3.5-flash-lite` by default) with strict JSON schemas; audio and images are sent in one request. Alternatively Gemma 4 (`gemma-4-26b-a4b-it` / `gemma-4-31b-it`) through the Apps Script `action=ai` proxy, which holds the key server-side and only forwards `gemma-*` models; the client degrades schema → JSON mode → free text. Location: Geolocation API with a refining watch + OpenStreetMap Nominatim reverse geocoding. Exports: CSV/JSON, a native SPSS `.sav` writer (`sav.js`), KMZ with an in-browser ZIP writer, jsPDF for the A4 form. Analysis runs in a Web Worker (`stats-worker.js`): descriptives, t-test/ANOVA/chi-square/regression, Cronbach's α, EFA, CB-SEM (ML), PLS-SEM with bootstrap, mediation, moderation, higher-order constructs. Questionnaire schema is dynamic (`applySchema`); constructs derive from Likert construct codes. Files: `index.html`, `styles.css`, `config.js` (team defaults), `app.js`, `designer.js`, `analysis.js`, `stats-worker.js`, `exports.js`, `sav.js`, `pdf.js`, `sw.js`, `backend/Code.gs`, `backend/appsscript.json`. Deploy by pushing to `main`.
+Static site (HTML/JS, no build) on GitHub Pages; backend is a Google Apps Script bound to a Sheet (rows) with Drive for media and a *Config* tab for the published questionnaire. The script updates itself from `backend/Code.gs` on GitHub through the Apps Script API (`selfUpdate_`: fetch → carry over config constants → `projects.updateContent` → new version → re-point web-app deployments; daily trigger + app-triggered `action=selfUpdate`). Records carry a per-device random `device_id`; `list?device=` returns a phone's own rows without the admin token, `list?token=` returns all. Local records are a send queue only — pruned once the row and its Drive files exist. AI: Gemini (`gemini-3.5-flash-lite` default) with strict JSON schemas, or Gemma 4 (`gemma-4-26b-a4b-it` / `gemma-4-31b-it`) through the `action=ai` proxy with a server-held key (schema → JSON → free-text fallback), OpenRouter, Chrome built-in. Team link: `?db=<endpoint>` (QR from the in-repo encoder `qr.js`, byte mode, level M, v1–20) or `config.js` default. Location: Geolocation API with a refining watch + Nominatim reverse geocoding. Exports: CSV/JSON, native SPSS `.sav` writer, KMZ, jsPDF. Analysis in a Web Worker (`stats-worker.js`): descriptives, t-test/ANOVA/chi-square/regression, Cronbach's α, EFA, CB-SEM, PLS-SEM with bootstrap, mediation, moderation. Files: `index.html`, `styles.css`, `config.js`, `qr.js`, `app.js`, `designer.js`, `analysis.js`, `stats-worker.js`, `exports.js`, `sav.js`, `pdf.js`, `sw.js`, `backend/Code.gs`, `backend/appsscript.json`. Deploy by pushing to `main`.

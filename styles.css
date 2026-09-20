@@ -197,6 +197,9 @@ dialog::backdrop { background: rgba(11,14,19,.5); }
 .dlg small.hint-team { color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 5px 8px; }
 .dlg .check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
 .dlg .check input { width: auto; accent-color: var(--accent); }
+.qr-dlg { width: min(420px, 94vw); }
+.qr-code svg { display: block; width: min(100%, 300px); height: auto; margin: 0 auto; border: 1px solid var(--line); border-radius: 10px; }
+.qr-link { font-size: 12px; word-break: break-all; color: var(--muted); background: var(--accent-soft); padding: 8px 10px; border-radius: 8px; }
 .photo-dlg { width: min(1100px, 96vw); background: #111; border: 0; }
 .photo-dlg-body { padding: 12px; }
 .photo-dlg-head { display: flex; justify-content: space-between; align-items: center; color: #ddd; font-size: 13px; margin-bottom: 8px; }

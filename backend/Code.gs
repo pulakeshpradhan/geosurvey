@@ -19,20 +19,19 @@
  *
  * Each submission = one row in "Responses" (new fields become new columns automatically).
  * Stamped photos and interview recordings are saved to the Drive folder PHOTO_FOLDER; links go to "photo_urls" / "audio_urls".
- * Duplicate submission ids (offline re-sync) are ignored. Re-deploy after editing this file
- * (Deploy → Manage deployments → Edit → Version: New).
+ * Duplicate submission ids (offline re-sync) are ignored. After editing this file, ▶ Run "updateBackend".
  *
- * "Sync all" in the app pulls every row of the sheet (all enumerators) into a phone's Records tab — only with the
- * team key ADMIN_TOKEN (default 'GeoSurvey'; change it for a real project). Without the key a phone can only send
- * its own records. Deleting rows and publishing the questionnaire also need the key.
+ * Once a record is in the sheet the phone deletes its local copy and shows its own rows straight from here
+ * (list?device=<its random id>). "Sync all" shows every row of the sheet — only with the team key ADMIN_TOKEN
+ * (default 'GeoSurvey'; change it for a real project). Deleting rows and publishing the questionnaire also need the key.
  *
  * OPTIONAL — GEMMA 4 PHOTO ANALYSIS FOR THE WHOLE TEAM (enumerators need no key on their phones)
  *  Get one free key at https://aistudio.google.com/app/apikey, paste it into AI_KEY below (or add a Script
- *  Property named AI_KEY under Project Settings), then deploy a NEW VERSION. Phones then pick
+ *  Property named AI_KEY under Project Settings), then ▶ Run "updateBackend". Phones then pick
  *  "Gemma 4 via database backend" automatically. Google serves Gemma 4 free of charge with rate limits.
  */
 
-var BACKEND_VERSION = '1.15.4';                    // reported to the app (Settings → Test database)
+var BACKEND_VERSION = '1.15.5';                    // reported to the app (Settings → Test database)
 var AI_KEY = '';                                   // <-- optional: Google AI Studio key shared by the team (Gemma 4 only)
 var AI_MODEL = 'gemma-4-26b-a4b-it';              // default when the app does not ask for a specific Gemma model
 
@@ -268,20 +267,23 @@ function doGet(e) {
     }
     var sh = getSheet_();
     var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
-    if (p.action === 'list') {
-      if (!isAdmin_(p.token)) return json_({ ok: false, error: p.token ? 'Invalid admin token' : 'NO_TOKEN', version: BACKEND_VERSION });
-      var sheetUrl = ss_().getUrl();
+    if (p.action === 'list') { // token → every row; device=<id> → only rows that phone submitted (its id is a random secret)
+      var admin = isAdmin_(p.token), device = String(p.device || '');
+      if (!admin && !device) return json_({ ok: false, error: p.token ? 'Invalid admin token' : 'NO_TOKEN', version: BACKEND_VERSION });
+      var sheetUrl = admin ? ss_().getUrl() : '';
       if (lastRow < 2) return json_({ ok: true, total: 0, rows: [], sheetUrl: sheetUrl, version: BACKEND_VERSION });
       var limit = Math.min(parseInt(p.limit || 500, 10), 5000);
       var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+      var skip = headers.indexOf('photo_thumb'), devCol = headers.indexOf('device_id');
+      var toObj = function (r) { var o = {}; headers.forEach(function (h, i) { if (h && i !== skip) o[h] = r[i] instanceof Date ? r[i].toISOString() : r[i]; }); return o; };
+      if (!admin) {
+        if (devCol < 0) return json_({ ok: true, total: 0, rows: [], sheetUrl: '', version: BACKEND_VERSION });
+        var all = sh.getRange(2, 1, lastRow - 1, lastCol).getValues(), mine = [];
+        for (var i = all.length - 1; i >= 0 && mine.length < limit; i--) if (String(all[i][devCol]) === device) mine.push(toObj(all[i]));
+        return json_({ ok: true, total: mine.length, rows: mine, sheetUrl: '', version: BACKEND_VERSION });
+      }
       var n = Math.min(limit, lastRow - 1);
-      var values = sh.getRange(lastRow - n + 1, 1, n, lastCol).getValues();
-      var skip = headers.indexOf('photo_thumb');
-      var rows = values.reverse().map(function (r) {
-        var o = {};
-        headers.forEach(function (h, i) { if (h && i !== skip) o[h] = r[i] instanceof Date ? r[i].toISOString() : r[i]; });
-        return o;
-      });
+      var rows = sh.getRange(lastRow - n + 1, 1, n, lastCol).getValues().reverse().map(toObj);
       return json_({ ok: true, total: lastRow - 1, rows: rows, sheetUrl: sheetUrl, version: BACKEND_VERSION });
     }
     return json_({ ok: true, total: Math.max(0, lastRow - 1) });

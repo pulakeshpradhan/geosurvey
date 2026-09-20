@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.4';
+const APP_VERSION = '1.15.5';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -237,6 +237,8 @@ const META_FIELDS = [
 /* ------------------------------------------------------------------ */
 const DEFAULT_SETTINGS = { engine: 'auto', geminiKey: '', model: 'gemini-3.5-flash-lite', orKey: '', orModel: 'google/gemini-2.5-flash-lite', gemmaModel: 'gemma-4-26b-a4b-it', endpoint: '', surveyor: '', maxDim: 1024, stamp: true, uploadPhotos: true, sampleTools: false };
 let settings = Object.assign({}, DEFAULT_SETTINGS, LS.get('gs_settings', {}));
+// Random per-device secret: submitted with every record so this phone can read back its own rows without the team key
+if (!settings.deviceId) { settings.deviceId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); LS.set('gs_settings', settings); }
 
 /* Database endpoint, in order of precedence: typed in Settings → ?db= link → config.js team default. */
 const TEAM_ENDPOINT = (typeof GS_CONFIG !== 'undefined' && GS_CONFIG.endpoint || '').trim();
@@ -246,6 +248,15 @@ function setEndpoint(url, source) {
   if (url !== settings.endpoint) { delete settings.backendAI; delete settings.backendVersion; delete settings.folderUrl; }
   settings.endpoint = url; settings.endpointSource = source; LS.set('gs_settings', settings);
   return true;
+}
+const teamLink = () => settings.endpoint ? `${location.origin}${location.pathname}?db=${encodeURIComponent(settings.endpoint)}` : '';
+/** Team-link popup: the link as a QR code, built from the configured endpoint. */
+function openTeamQr() {
+  const link = teamLink();
+  $('#qrSettings').hidden = !!link; $('#qrCopy').hidden = !link; $('#qrShare').hidden = !link || !navigator.share;
+  if (!link) { $('#qrSub').textContent = 'Set the database endpoint in Settings first — the team link is built from it automatically.'; $('#qrCode').innerHTML = ''; $('#qrLink').textContent = ''; }
+  else { $('#qrSub').textContent = 'Point the phone camera at this code: the app opens already connected to this database, nothing to type.'; $('#qrCode').innerHTML = QR.svg(link); $('#qrLink').textContent = link; }
+  $('#qrDlg').showModal();
 }
 /** Adopt the endpoint from a ?db= link or from config.js unless the enumerator typed their own. */
 function resolveEndpoint() {
@@ -1006,7 +1017,7 @@ async function submitForm() {
   const btn = $('#submitBtn'); btn.disabled = true;
   try {
     const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2);
-    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', app_version: APP_VERSION, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
+    const rec = { id, submitted_at: new Date().toISOString(), ...collect(), photo_count: photos.length, photo_thumb: '', photo_urls: '', app_version: APP_VERSION, device_id: settings.deviceId, interview_transcript: ($('#transcript')?.value || '').trim(), audio_count: audioClips.length, audio_duration_s: Math.round(audioClips.reduce((s, c) => s + c.duration, 0)), audio_urls: '', status: 'pending' };
     if (photos.length || audioClips.length) {
       if (photos.length) { try { rec.photo_thumb = await makeThumb(photos[0].dataUrl); } catch {} }
       await PhotoDB.put(id, photos.map(p => ({ name: p.name, section: p.section, dataUrl: p.dataUrl, taken_at: p.taken_at, lat: p.lat, lon: p.lon, acc: p.acc })), audioClips.map((c, i) => ({ name: `audio_${i + 1}${c.section ? '_' + c.section : ''}.${c.mime.includes('mp4') ? 'm4a' : c.mime.includes('ogg') ? 'ogg' : 'webm'}`, ...c })));
@@ -1112,21 +1123,23 @@ async function uploadMissingFiles() {
   let ok = 0, fail = 0;
   let lastErr = '';
   for (const rec of todo) { try { await attachFiles(rec); ok++; } catch (e) { rec.files_error = e.message; lastErr = e.message; fail++; saveRecords(records); if (e.message === DRIVE_HELP) break; } saveRecords(records); }
+  if (ok) { try { await refreshDbRows(); await pruneSynced(); } catch {} }
   renderLocalTable();
   if (ok) toast(`${ok} record(s): files uploaded to Drive`, 'ok'); if (fail) toast(lastErr === DRIVE_HELP ? DRIVE_HELP : `${fail} record(s) failed — see the Records table`, 'err');
 }
 const filesMissing = r => ((r.photo_count > 0 && !(r.photo_urls || '').includes('drive.google.com')) || (r.audio_count > 0 && !(r.audio_urls || '').includes('drive.google.com')) || (r.interview_transcript && !(r.transcript_url || '').includes('drive.google.com')));
 let syncing = false;
-/** Send this device's pending records. all = also pull every team record (needs the team key); manual runs report, automatic ones stay quiet. */
+/** Send this device's pending records, drop the local copies once they (and their files) are in the database, then re-read the
+ *  database: this phone's own rows, or every row when a team key is present (all = ask for the key if missing). */
 async function syncPending(manual = true, all = false) {
   if (syncing) return;
   const records = getRecords(); const pending = records.filter(r => r.status !== 'synced');
   if (!settings.endpoint) { renderLocalTable(); if (pending.length || manual) toast(pending.length ? `${pending.length} record(s) kept on device — set a database endpoint in Settings to sync.` : 'Set a database endpoint in Settings first'); return; }
   if (!navigator.onLine) { renderLocalTable(); if (manual) toast('Offline — will sync when the connection returns.'); return; }
   if (all && !adminToken() && !askTeamKey()) return;
-  // Automatic runs (after Submit, on reconnect) refresh the team list only with a key and at most every 10 minutes
-  const wantList = all || (!manual && !!adminToken() && Date.now() - teamRowsAt > 600000);
-  if (!pending.length && !wantList) { renderLocalTable(); if (manual) toast('Nothing pending — all records on this device are in the database', 'ok'); return; }
+  // Automatic runs (after Submit, on reconnect) re-read the database at most every 10 minutes when nothing was sent
+  const wantList = manual || pending.length > 0 || Date.now() - dbRowsAt > 600000;
+  if (!pending.length && !wantList) { renderLocalTable(); return; }
   syncing = true; $('#syncBtn').disabled = true; $('#syncAllBtn').disabled = true;
   let ok = 0, fail = 0;
   for (const rec of pending) {
@@ -1137,15 +1150,27 @@ async function syncPending(manual = true, all = false) {
   if (ok) toast(`${ok} record(s) synced to the database`, 'ok');
   if (fail) toast(`${fail} record(s) failed to sync — check endpoint / connection`, 'err');
   if (wantList) {
-    try { const n = await refreshTeamRows(); if (manual) toast(`${n} record(s) in the team database`, 'ok'); }
-    catch (e) { if (manual) toast('Could not load the team records: ' + e.message, 'err'); }
+    try {
+      const n = await refreshDbRows();
+      await pruneSynced();
+      if (manual) toast(dbScope === 'all' ? `${n} record(s) in the team database` : `${n} of your record(s) in the database`, 'ok');
+    } catch (e) { if (manual) toast('Could not read the database: ' + e.message, 'err'); }
   }
   syncing = false; $('#syncBtn').disabled = false; $('#syncAllBtn').disabled = false; renderLocalTable();
 }
+/** Local copies are only a queue: once a record and its files are in the database it is deleted from the phone. */
+async function pruneSynced() {
+  const records = getRecords(); const inDb = new Set(dbRows.map(r => String(r.id)));
+  const drop = records.filter(r => r.status === 'synced' && inDb.has(String(r.id)) && !filesMissing(r));
+  if (!drop.length) return 0;
+  for (const r of drop) await PhotoDB.del(r.id).catch(() => {});
+  saveRecords(records.filter(r => !drop.includes(r)));
+  return drop.length;
+}
 
-/* Every row of the Google Sheet (all enumerators): "Sync all" with the team key, cached in IndexedDB for offline viewing. */
-let teamRows = [], teamRowsAt = 0;
-const TEAM_CACHE_KEY = '__team_rows';
+/* Rows read straight from the Google Sheet: this phone's own rows (by device id, no key) or every row (team key), cached in IndexedDB. */
+let dbRows = [], dbRowsAt = 0, dbScope = 'mine';
+const DB_CACHE_KEY = '__team_rows';
 /** Ask for the team key once and keep it in Settings. Returns false when the user cancels. */
 function askTeamKey() {
   const k = prompt('Team key (set as ADMIN_TOKEN in the Apps Script; the default is "GeoSurvey"). It unlocks the records of the whole team on this phone:', settings.adminKey || '');
@@ -1153,40 +1178,42 @@ function askTeamKey() {
   settings.adminKey = k.trim(); LS.set('gs_settings', settings);
   return !!settings.adminKey;
 }
-async function loadTeamCache() {
-  try { const c = await PhotoDB.getKV(TEAM_CACHE_KEY); if (c && c.endpoint === settings.endpoint) { teamRows = c.rows || []; teamRowsAt = c.at || 0; } } catch {}
+async function loadDbCache() {
+  try { const c = await PhotoDB.getKV(DB_CACHE_KEY); if (c && c.endpoint === settings.endpoint) { dbRows = c.rows || []; dbRowsAt = c.at || 0; dbScope = c.scope || 'all'; } } catch {}
 }
-async function refreshTeamRows() {
+async function refreshDbRows() {
   if (!settings.endpoint) throw new Error('No database endpoint configured (Settings)');
-  if (!adminToken()) throw new Error('the team key is needed — press "Sync all" and enter it');
-  const q = new URLSearchParams({ action: 'list', limit: 5000, token: adminToken() });
+  const scope = adminToken() ? 'all' : 'mine';
+  const q = new URLSearchParams({ action: 'list', limit: 5000 }); if (scope === 'all') q.set('token', adminToken()); else q.set('device', settings.deviceId);
   const r = await fetch(settings.endpoint + (settings.endpoint.includes('?') ? '&' : '?') + q);
   const j = await r.json().catch(() => ({}));
   if (!j.ok) {
     if (j.error === 'Invalid admin token') { settings.adminKey = ''; LS.set('gs_settings', settings); sessionStorage.removeItem('gs_admin'); throw new Error('team key not accepted — ask your admin for the key set in Code.gs (ADMIN_TOKEN)'); }
+    if (!j.version) throw new Error('Backend is older than this app — ' + PASTE_ONCE);
     throw new Error(j.error || `HTTP ${r.status}`);
   }
-  teamRows = j.rows || []; teamRowsAt = Date.now();
-  PhotoDB.putKV(TEAM_CACHE_KEY, { rows: teamRows, at: teamRowsAt, endpoint: settings.endpoint }).catch(() => {});
+  dbRows = j.rows || []; dbRowsAt = Date.now(); dbScope = scope;
+  PhotoDB.putKV(DB_CACHE_KEY, { rows: dbRows, at: dbRowsAt, scope, endpoint: settings.endpoint }).catch(() => {});
   if (typeof Analysis !== 'undefined') Analysis.schedule();
-  return teamRows.length;
+  return dbRows.length;
 }
-/** Device records first (they carry thumbnails and sync state), then everything else the team submitted. */
+/** Pending / failed records still on this phone first, then what the database holds. */
 function allRecords() {
   const local = getRecords(); const seen = new Set(local.map(r => r.id));
-  return [...local, ...teamRows.filter(r => r.id && !seen.has(String(r.id))).map(r => ({ ...r, status: 'database' }))];
+  return [...local, ...dbRows.filter(r => r.id && !seen.has(String(r.id))).map(r => ({ ...r, status: 'database' }))];
 }
-/** What the Analysis tab treats as the cloud dataset: the admin listing when connected, else the team listing. */
-function cloudRows() { return adminRows.length ? adminRows : teamRows; }
+/** What the Analysis tab treats as the cloud dataset: the admin listing when connected, else the database rows. */
+function cloudRows() { return adminRows.length ? adminRows : dbRows; }
 
 const TABLE_COLS = ['submitted_at', 'head_name', 'village', 'district', 'postcode', 'house_type', 'monthly_income', 'household_size', 'latitude', 'longitude', 'surveyor'];
 function renderLocalTable() {
   const local = getRecords(); const records = allRecords();
-  const synced = local.filter(r => r.status === 'synced').length; const team = records.length - local.length;
+  const waiting = local.filter(r => r.status !== 'synced').length; const kept = local.length - waiting;
   const parts = [];
-  if (local.length) parts.push(`${local.length} on this device (${synced} synced, ${local.length - synced} pending or failed)`);
-  if (teamRowsAt) parts.push(`${team} more from the team database (${teamRows.length} rows in total, as of ${fmtDate(new Date(teamRowsAt).toISOString())})`);
-  else if (settings.endpoint) parts.push(adminToken() ? 'press Sync all to load every record submitted by the team' : 'Sync all shows the whole team\'s records if you have the team key');
+  if (waiting) parts.push(`${waiting} waiting on this phone to be sent`);
+  if (kept) parts.push(`${kept} sent but files not yet in Drive (kept on the phone until "Upload files" succeeds)`);
+  if (dbRowsAt) parts.push(`${dbRows.length} ${dbScope === 'all' ? 'record(s) of the whole team' : 'of your record(s)'} in the database, as of ${fmtDate(new Date(dbRowsAt).toISOString())}${dbScope === 'mine' ? ' — Sync all shows everyone\'s with the team key' : ''}`);
+  else if (settings.endpoint) parts.push('press Sync to read your records from the database' + (adminToken() ? '' : '; Sync all shows the whole team\'s with the team key'));
   $('#localSummary').textContent = parts.length ? parts.join(' · ') + '.' : 'No submissions on this device yet.';
   const link = $('#driveFolderLink'); if (link) { link.hidden = !settings.folderUrl; link.href = settings.folderUrl || '#'; }
   const driveLinks = r => `${String(r.photo_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Photo ${i + 1}">📷</a>`).join('')}${String(r.audio_urls || '').split(/\s+/).filter(u => u.includes('drive')).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="Audio ${i + 1}">🎙</a>`).join('')}${(r.transcript_url || '').includes('drive') ? `<a href="${esc(r.transcript_url)}" target="_blank" rel="noopener" title="Transcript">📝</a>` : ''}`;
@@ -1198,7 +1225,7 @@ function renderLocalTable() {
     return `<span class="pill synced">in Drive</span> ${driveLinks(r)}`;
   };
   const row = r => r.status === 'database'
-    ? `<tr class="team"><td><span class="pill database" title="Submitted by the team; stored in the Google Sheet">database</span></td><td>${+r.photo_count ? `<span class="dim">${r.photo_count} 📷</span>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td></td></tr>`
+    ? `<tr class="team"><td><span class="pill database" title="Stored in the Google Sheet">database</span></td><td>${+r.photo_count ? `<span class="dim">${r.photo_count} 📷</span>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td></td></tr>`
     : `<tr><td><span class="pill ${r.status}" title="${esc(r.error || '')}">${r.status}</span></td><td>${r.photo_thumb ? `<img class="mini" src="${r.photo_thumb}" data-view="${r.id}" title="${r.photo_count} photo(s)">` : ''}${r.audio_count ? `<button class="link-btn" data-audio="${r.id}" title="${r.audio_count} audio clip(s), ${fmtDur(r.audio_duration_s)}">🎙 ${fmtDur(r.audio_duration_s)}</button>` : ''}${r.interview_transcript ? `<button class="link-btn" data-audio="${r.id}" title="Interview transcript">📝</button>` : ''}</td><td>${filesCell(r)}</td>${TABLE_COLS.map(c => `<td title="${esc(r[c])}">${esc(c === 'submitted_at' ? fmtDate(r[c]) : r[c])}</td>`).join('')}<td class="btn-row">${r.photo_count || r.audio_count || r.interview_transcript ? `<button class="link-btn" data-dl="${r.id}">files</button>` : ''}<button class="link-btn danger" data-del="${r.id}">delete</button></td></tr>`;
   $('#localTable').innerHTML = records.length ? `<thead><tr><th>Status</th><th>Photo</th><th>Files in Drive</th>${TABLE_COLS.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead><tbody>${records.map(row).join('')}</tbody>` : '';
   $$('#localTable [data-del]').forEach(b => b.onclick = async () => {
@@ -1206,7 +1233,7 @@ function renderLocalTable() {
     await PhotoDB.del(b.dataset.del); saveRecords(getRecords().filter(r => r.id !== b.dataset.del)); renderLocalTable();
   });
   $$('#localTable [data-view]').forEach(i => i.onclick = async () => openGallery('Stamped photos', await PhotoDB.get(i.dataset.view)));
-  $$('#localTable [data-attach]').forEach(b => b.onclick = async () => { b.disabled = true; const records = getRecords(); const rec = records.find(x => x.id === b.dataset.attach); try { await attachFiles(rec); toast('Files uploaded to Drive', 'ok'); } catch (e) { rec.files_error = e.message; toast(e.message, 'err'); } saveRecords(records); renderLocalTable(); });
+  $$('#localTable [data-attach]').forEach(b => b.onclick = async () => { b.disabled = true; const records = getRecords(); const rec = records.find(x => x.id === b.dataset.attach); let done = false; try { await attachFiles(rec); done = true; toast('Files uploaded to Drive', 'ok'); } catch (e) { rec.files_error = e.message; toast(e.message, 'err'); } saveRecords(records); if (done) { try { await refreshDbRows(); await pruneSynced(); } catch {} } renderLocalTable(); });
   $$('#localTable [data-audio]').forEach(b => b.onclick = async () => {
     const clips = await PhotoDB.getAudio(b.dataset.audio); const rec = getRecords().find(x => x.id === b.dataset.audio);
     $('#photoDlgTitle').textContent = 'Interview recording & transcript';
@@ -1335,7 +1362,7 @@ function showView(id) {
   $('#actionBar').hidden = id !== 'formView';
   $('#pdfBtn').hidden = id !== 'formView';
   $('#editBtn').classList.toggle('active', id === 'editView');
-  if (id === 'responsesView') { renderLocalTable(); if (settings.endpoint && adminToken() && navigator.onLine && !syncing && Date.now() - teamRowsAt > 60000) refreshTeamRows().then(renderLocalTable).catch(() => {}); }
+  if (id === 'responsesView') { renderLocalTable(); if (settings.endpoint && navigator.onLine && !syncing && Date.now() - dbRowsAt > 60000) refreshDbRows().then(pruneSynced).then(renderLocalTable).catch(() => {}); }
   if (id === 'analysisView' && typeof Analysis !== 'undefined') Analysis.open();
   if (id === 'editView') { if (typeof Designer !== 'undefined') Designer.open(); if (adminToken() && $('#adminPanel').hidden) adminConnect(); }
 }
@@ -1345,7 +1372,7 @@ function init() {
   if (settings.surveyor) setValue('surveyor', settings.surveyor);
   resolveEndpoint();
   restoreDraft(); updateProgress(); updatePendingBadge(); updateEngineChip(); detectChromeAI();
-  loadTeamCache().then(() => { if (!$('#responsesView').hidden) renderLocalTable(); if (typeof Analysis !== 'undefined' && teamRows.length) Analysis.schedule(); });
+  loadDbCache().then(() => { if (!$('#responsesView').hidden) renderLocalTable(); if (typeof Analysis !== 'undefined' && dbRows.length) Analysis.schedule(); });
   autoLocate();
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#formView').hidden && (!lastFix || Date.now() - lastFix.time > 300000)) autoLocate(); });
 
@@ -1374,6 +1401,11 @@ function init() {
     else e.target.blur();
   });
   $('#setEndpoint').addEventListener('input', updateEndpointHint);
+  $('#qrBtn').onclick = openTeamQr;
+  $('#qrClose').onclick = () => $('#qrDlg').close();
+  $('#qrSettings').onclick = () => { $('#qrDlg').close(); openSettings(); };
+  $('#qrCopy').onclick = async () => { const link = teamLink(); try { await navigator.clipboard.writeText(link); toast('Team link copied', 'ok'); } catch { prompt('Copy this link:', link); } };
+  $('#qrShare').onclick = () => navigator.share({ title: 'GeoSurvey team link', text: 'Open this link once to connect your phone to our survey database.', url: teamLink() }).catch(() => {});
   $('#teamLinkBtn').onclick = async e => {
     e.preventDefault();
     const url = $('#setEndpoint').value.trim() || TEAM_ENDPOINT; if (!url) return;
@@ -1406,13 +1438,6 @@ function init() {
   $('#exportJsonBtn').onclick = () => Exports.json(allRecords());
   $('#exportSpssBtn').onclick = () => Exports.spss(allRecords());
   $('#exportKmzBtn').onclick = () => Exports.kmz(allRecords());
-  $('#clearLocalBtn').onclick = async () => {
-    const synced = getRecords().filter(r => r.status === 'synced');
-    if (!synced.length) return toast('No synced records to remove');
-    if (!confirm(`Remove ${synced.length} synced record(s) and their photos from this device? They remain in the Google Sheet / Drive.`)) return;
-    for (const r of synced) await PhotoDB.del(r.id);
-    saveRecords(getRecords().filter(r => r.status !== 'synced')); renderLocalTable();
-  };
   $('#adminConnectBtn').onclick = adminConnect;
   $('#adminToken').addEventListener('keydown', e => { if (e.key === 'Enter') adminConnect(); });
   $('#adminRefreshBtn').onclick = () => adminLoad().catch(e => toast(e.message, 'err'));

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.15.4">
+  <link rel="stylesheet" href="styles.css?v=1.15.5">
 </head>
 <body>
   <header class="topbar">
@@ -24,6 +24,9 @@
       <button class="tab" data-view="responsesView" role="tab">Records <span id="pendingBadge" class="badge" hidden>0</span></button>
       <button class="tab" data-view="analysisView" role="tab">Analysis</button>
     </nav>
+    <button id="qrBtn" class="icon-btn" title="Team link as a QR code — scan it on a phone to connect it to this database" aria-label="Team link QR code">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M21 14v1M21 18v3h-3M14 21h1"/></svg>
+    </button>
     <button id="pdfBtn" class="btn btn-outline btn-sm" title="Generate an A4 PDF of the current form">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
       PDF
@@ -105,7 +108,7 @@
         <div class="card-head">
           <div><h2>Records</h2><p class="sub" id="localSummary"></p></div>
           <div class="btn-row">
-            <button id="syncBtn" class="btn btn-primary btn-sm" title="Send this phone's pending records to the database">Sync</button>
+            <button id="syncBtn" class="btn btn-primary btn-sm" title="Send pending records, then show your records straight from the database">Sync</button>
             <button id="syncAllBtn" class="btn btn-outline btn-sm" title="Also load every record submitted by the whole team (needs the team key)">Sync all</button>
             <button id="uploadFilesBtn" class="btn btn-outline btn-sm" title="Re-upload photos, recordings and transcripts of synced records that are not yet in Drive">Upload files</button>
             <a id="driveFolderLink" class="btn btn-outline btn-sm" target="_blank" rel="noopener" hidden>Open Drive folder</a>
@@ -113,7 +116,6 @@
             <button id="exportJsonBtn" class="btn btn-outline btn-sm">Export JSON</button>
             <button id="exportSpssBtn" class="btn btn-outline btn-sm" title="SPSS .sav with variable labels, value labels and measurement levels">Export SPSS (.sav)</button>
             <button id="exportKmzBtn" class="btn btn-outline btn-sm" title="Google Earth / GIS placemarks">Export KMZ</button>
-            <button id="clearLocalBtn" class="btn btn-ghost btn-sm">Remove synced</button>
           </div>
         </div>
         <div class="table-wrap"><table id="localTable" class="table"></table></div>
@@ -316,6 +318,22 @@
     </form>
   </dialog>
 
+  <!-- Team link QR code -->
+  <dialog id="qrDlg" class="qr-dlg">
+    <div class="dlg">
+      <h2>Team link</h2>
+      <p class="sub" id="qrSub"></p>
+      <div id="qrCode" class="qr-code"></div>
+      <div id="qrLink" class="qr-link"></div>
+      <div class="btn-row end">
+        <button type="button" id="qrSettings" class="btn btn-outline btn-sm" hidden>Open Settings</button>
+        <button type="button" id="qrCopy" class="btn btn-outline btn-sm">Copy link</button>
+        <button type="button" id="qrShare" class="btn btn-outline btn-sm" hidden>Share…</button>
+        <button type="button" id="qrClose" class="btn btn-primary btn-sm">Close</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Photo viewer -->
   <dialog id="photoDlg" class="photo-dlg">
     <div class="photo-dlg-body">
@@ -326,12 +344,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.15.4"></script>
-  <script src="app.js?v=1.15.4"></script>
-  <script src="sav.js?v=1.15.4"></script>
-  <script src="exports.js?v=1.15.4"></script>
-  <script src="analysis.js?v=1.15.4"></script>
-  <script src="pdf.js?v=1.15.4"></script>
-  <script src="designer.js?v=1.15.4"></script>
+  <script src="config.js?v=1.15.5"></script>
+  <script src="qr.js?v=1.15.5"></script>
+  <script src="app.js?v=1.15.5"></script>
+  <script src="sav.js?v=1.15.5"></script>
+  <script src="exports.js?v=1.15.5"></script>
+  <script src="analysis.js?v=1.15.5"></script>
+  <script src="pdf.js?v=1.15.5"></script>
+  <script src="designer.js?v=1.15.5"></script>
 </body>
 </html>
