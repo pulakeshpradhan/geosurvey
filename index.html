@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.15.6">
+  <link rel="stylesheet" href="styles.css?v=1.15.7">
 </head>
 <body>
   <header class="topbar">
@@ -318,6 +318,29 @@
     </form>
   </dialog>
 
+  <!-- First-visit welcome -->
+  <dialog id="welcomeDlg" class="welcome-dlg">
+    <div class="dlg">
+      <h2>Welcome to GeoSurvey</h2>
+      <p class="sub">A field-survey app built for household work. What it does that Google Forms and KoboToolbox don't:</p>
+      <div class="table-wrap"><table class="cmp">
+        <thead><tr><th></th><th>GeoSurvey</th><th>Google Forms</th><th>KoboToolbox</th></tr></thead>
+        <tbody>
+          <tr><td>AI fills the form from photos and voice, in any Indian language</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="no" data-l="Kobo">–</td></tr>
+          <tr><td>Converts a paper questionnaire (PDF or photos) into a digital form</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="no" data-l="Kobo">–</td></tr>
+          <tr><td>Precise GPS and address captured automatically; photos stamped with time and place</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="part" data-l="Kobo">GPS only</td></tr>
+          <tr><td>Works offline, syncs later</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="yes" data-l="Kobo">✓</td></tr>
+          <tr><td>Data stays in your own Google Sheet and Drive</td><td class="yes" data-l="GeoSurvey">✓</td><td class="part" data-l="Forms">Sheet only</td><td class="no" data-l="Kobo">Kobo server</td></tr>
+          <tr><td>Statistics, reliability, factor analysis, SEM and a written report built in</td><td class="yes" data-l="GeoSurvey">✓</td><td class="no" data-l="Forms">–</td><td class="part" data-l="Kobo">basic</td></tr>
+          <tr><td>SPSS (.sav), KMZ map and A4 PDF exports</td><td class="yes" data-l="GeoSurvey">✓</td><td class="part" data-l="Forms">CSV</td><td class="part" data-l="Kobo">CSV / XLS</td></tr>
+          <tr><td>Nothing to install, no account for enumerators, free</td><td class="yes" data-l="GeoSurvey">✓</td><td class="yes" data-l="Forms">✓</td><td class="part" data-l="Kobo">app + account</td></tr>
+        </tbody>
+      </table></div>
+      <p class="sub">To begin: scan your team's QR code, or tap ⚙️ and paste the database link. Tap outside this box to close it.</p>
+      <div class="btn-row end"><button type="button" id="welcomeClose" class="btn btn-primary">Get started</button></div>
+    </div>
+  </dialog>
+
   <!-- Team link QR code -->
   <dialog id="qrDlg" class="qr-dlg">
     <div class="dlg">
@@ -344,13 +367,13 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=1.15.6"></script>
-  <script src="qr.js?v=1.15.6"></script>
-  <script src="app.js?v=1.15.6"></script>
-  <script src="sav.js?v=1.15.6"></script>
-  <script src="exports.js?v=1.15.6"></script>
-  <script src="analysis.js?v=1.15.6"></script>
-  <script src="pdf.js?v=1.15.6"></script>
-  <script src="designer.js?v=1.15.6"></script>
+  <script src="config.js?v=1.15.7"></script>
+  <script src="qr.js?v=1.15.7"></script>
+  <script src="app.js?v=1.15.7"></script>
+  <script src="sav.js?v=1.15.7"></script>
+  <script src="exports.js?v=1.15.7"></script>
+  <script src="analysis.js?v=1.15.7"></script>
+  <script src="pdf.js?v=1.15.7"></script>
+  <script src="designer.js?v=1.15.7"></script>
 </body>
 </html>

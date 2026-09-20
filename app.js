@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.15.6';
+const APP_VERSION = '1.15.7';
 const MAX_PHOTOS = 12;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1423,6 +1423,13 @@ function init() {
     else e.target.blur();
   });
   $('#setEndpoint').addEventListener('input', updateEndpointHint);
+  // First visit only: what GeoSurvey adds over ordinary survey tools. Tapping the backdrop closes it.
+  const welcome = $('#welcomeDlg');
+  const welcomeDone = () => { if (welcome.open) welcome.close(); LS.set('gs_welcomed', APP_VERSION); };
+  $('#welcomeClose').onclick = welcomeDone;
+  welcome.addEventListener('click', e => { if (e.target === welcome) welcomeDone(); });
+  welcome.addEventListener('close', () => LS.set('gs_welcomed', APP_VERSION));
+  if (!LS.get('gs_welcomed', null)) setTimeout(() => { if (!$('#settingsDlg').open) welcome.showModal(); }, 400);
   $('#qrBtn').onclick = openTeamQr;
   $('#qrClose').onclick = () => $('#qrDlg').close();
   $('#qrSettings').onclick = () => { $('#qrDlg').close(); openSettings(); };

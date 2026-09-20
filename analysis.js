@@ -107,7 +107,7 @@ const Analysis = (() => {
     if (running) { queued = true; return; }
     const ds = dataset();
     setStatus($('#anStatus'), `Analyzing ${ds.rows.length} records (${ds.nReal} from ${ds.srcLabel}${ds.nSample ? ` + ${ds.nSample} sample` : ''})…`, '', true);
-    if (!worker) { worker = new Worker('stats-worker.js?v=1.15.6'); worker.onmessage = onResult; worker.onerror = e => { running = false; setStatus($('#anStatus'), 'Analysis error: ' + e.message, 'err'); }; }
+    if (!worker) { worker = new Worker('stats-worker.js?v=1.15.7'); worker.onmessage = onResult; worker.onerror = e => { running = false; setStatus($('#anStatus'), 'Analysis error: ' + e.message, 'err'); }; }
     running = true;
     const schema = { constructs: CONSTRUCTS, model: STRUCTURAL_MODEL, fields: ALL_FIELDS.map(({ k, label, type, options }) => ({ k, label, type, options })) };
     worker.postMessage({ records: ds.rows.map(({ photo_thumb, ...r }) => r), schema, meta: ds });
