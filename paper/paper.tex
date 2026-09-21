@@ -1,0 +1,311 @@
+% Pandoc template that renders paper.md in the style of a JOSS article.
+% Build: see build.sh (pandoc --citeproc → xelatex). The journal itself compiles
+% paper.md with its own tooling; this file only produces a local preview PDF.
+\documentclass[10pt,a4paper,onecolumn]{article}
+\usepackage[top=2.4cm,bottom=2.6cm,left=2.2cm,right=2.2cm]{geometry}
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Pagella}
+\setsansfont{TeX Gyre Heros}
+\setmonofont[Scale=0.9]{TeX Gyre Cursor}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\definecolor{jossblue}{RGB}{39,86,154}
+\definecolor{rule}{RGB}{200,206,216}
+\definecolor{muted}{RGB}{90,97,110}
+\usepackage{xurl}
+\usepackage[colorlinks=true,linkcolor=jossblue,citecolor=jossblue,urlcolor=jossblue,breaklinks=true]{hyperref}
+\usepackage{titlesec}
+\titleformat{\section}{\sffamily\bfseries\large\color{jossblue}}{}{0pt}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.5em}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=1.4em}
+\usepackage{microtype}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[L]{\sffamily\footnotesize\color{muted}Pulakesh
+Pradhan, (2026). GeoSurvey: an installation-free, AI-assisted field
+survey application with a Google Sheets backend and built-in statistical
+analysis. \emph{Journal of Open Source Software}, draft.}
+\fancyfoot[R]{\sffamily\footnotesize\color{muted}\thepage}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+% definitions for citeproc citations
+\NewDocumentCommand\citeproctext{}{}
+\NewDocumentCommand\citeproc{mm}{%
+  \begingroup\def\citeproctext{#2}\cite{#1}\endgroup}
+\makeatletter
+ % allow citations to break across lines
+ \let\@cite@ofmt\@firstofone
+ % avoid brackets around text for \cite:
+ \def\@biblabel#1{}
+ \def\@cite#1#2{{#1\if@tempswa , #2\fi}}
+\makeatother
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newlength{\csllabelwidth}
+\setlength{\csllabelwidth}{3em}
+\newenvironment{CSLReferences}[2] % #1 hanging-indent, #2 entry-spacing
+ {\begin{list}{}{%
+  \setlength{\itemindent}{0pt}
+  \setlength{\leftmargin}{0pt}
+  \setlength{\parsep}{0pt}
+  % turn on hanging indent if param 1 is 1
+  \ifodd #1
+   \setlength{\leftmargin}{\cslhangindent}
+   \setlength{\itemindent}{-1\cslhangindent}
+  \fi
+  % set entry spacing
+  \setlength{\itemsep}{#2\baselineskip}}}
+ {\end{list}}
+\usepackage{calc}
+\newcommand{\CSLBlock}[1]{\hfill\break\parbox[t]{\linewidth}{\strut\ignorespaces#1\strut}}
+\newcommand{\CSLLeftMargin}[1]{\parbox[t]{\csllabelwidth}{\strut#1\strut}}
+\newcommand{\CSLRightInline}[1]{\parbox[t]{\linewidth - \csllabelwidth}{\strut#1\strut}}
+\newcommand{\CSLIndent}[1]{\hspace{\cslhangindent}#1}
+\begin{document}
+
+{\sffamily\bfseries\LARGE\color{jossblue}\raggedright GeoSurvey: an
+installation-free, AI-assisted field survey application with a Google
+Sheets backend and built-in statistical analysis\par}
+\vspace{0.9em}
+{\large Pulakesh
+Pradhan\textsuperscript{1}~\href{https://orcid.org/0000-0003-3103-3617}{\textcolor{jossblue}{\footnotesize\sffamily ORCID 0000-0003-3103-3617}}\par}
+\vspace{0.35em}
+{\small\color{muted}\textsuperscript{1}\,Department of Geography,
+Ravenshaw University, Cuttack, Odisha, India\par}
+\vspace{0.6em}
+\begin{minipage}{\linewidth}\sffamily\footnotesize\color{muted}
+\textbf{DOI:} to be assigned on acceptance \quad
+\textbf{Software:} \href{https://github.com/pulakeshpradhan/geosurvey}{Repository} \textbullet{} \href{https://pulakeshpradhan.github.io/geosurvey/}{Live app}\\
+\textbf{Licence:} MIT \quad \textbf{Submitted:} 21 September
+2026 \quad \textbf{Status:} draft for submission to the Journal of Open Source Software
+\end{minipage}
+\vspace{0.4em}\hrule height 0.6pt \relax\vspace{0.9em}
+
+\section{Summary}\label{summary}
+
+GeoSurvey is a free, open-source application for household and
+socio-economic field surveys. It runs in the web browser of any phone,
+tablet or laptop without installation, and stores every submission in a
+Google Sheet owned by the survey team, with photographs, audio
+recordings and transcripts in the team's Google Drive. A questionnaire
+is designed in a visual editor, converted from a scanned paper form, or
+generated from a one-line brief by a large language model; it is then
+\emph{published} so that every connected phone adopts it. In the field
+the app records a GPS fix and a reverse-geocoded address automatically,
+stamps photographs with time and location, queues submissions while
+offline, and can pre-fill answers from photographs or a recorded
+interview using a multimodal model. Collected records are streamed back
+from the database and can be exported as CSV, JSON, SPSS
+(\texttt{.sav}), KMZ and per-record PDF. A statistics engine that runs
+inside the browser produces descriptive statistics, reliability,
+exploratory factor analysis, covariance- and variance-based structural
+equation models, mediation and moderation tests, and a written report
+that updates whenever data change.
+
+\section{Statement of need}\label{statement-of-need}
+
+Small research teams --- postgraduate students, local NGOs, municipal or
+panchayat offices --- routinely collect household data with paper forms
+and re-enter them in a spreadsheet, or with general-purpose form
+builders such as Google Forms (Google LLC, 2026) that lack location
+capture, offline operation, media handling and statistical export.
+Specialised platforms such as Open Data Kit (Hartung et al., 2010),
+KoboToolbox (KoboToolbox, 2026) and Epicollect ({Aanensen et al.}, 2009)
+solve the data-collection problem well, but require either a hosted
+server or an account on a third-party service, an app installation on
+every device, and form authoring in a spreadsheet dialect such as
+XLSForm; the analysis of the collected data happens elsewhere, typically
+in SPSS, R or SmartPLS, after several manual export steps.
+
+GeoSurvey targets the gap between these two families. It has \textbf{no
+server to run and nothing to install}: the client is a static
+progressive web app served from GitHub Pages, and the backend is a
+single Google Apps Script bound to a Google Sheet in the team's own
+account, so the data never leave infrastructure the team already
+controls. Phones are connected by scanning a QR code or opening a team
+link; no typing of URLs or keys is needed. Because the analysis pipeline
+is part of the same application, a team can inspect reliability and
+factor structure of a scale after the first day of fieldwork and adjust
+the instrument, rather than discovering problems weeks later. The
+application was written for socio-economic surveys in rural India ---
+its transcription and auto-fill prompts handle Indian languages and
+code-switched speech, and its geocoding returns village, block and
+district --- but nothing in it is specific to that setting.
+
+\section{Functionality}\label{functionality}
+
+\textbf{Questionnaire design and management.} Sections, fields (text,
+number, date, telephone, single and multiple choice, Likert items, free
+text), the grouping of Likert items into \emph{constructs} for the
+analysis engine, and AI hints are edited visually. \emph{Design with AI}
+turns a brief or pasted text into a full instrument; a photographed
+paper questionnaire can be converted the same way. Several
+questionnaires can coexist in one spreadsheet, each with a dedicated
+response tab; an updated questionnaire can continue in its current tab
+or start a new one so that exports remain column-consistent. A
+\texttt{.geosurvey} project file (schema, team link, interview language)
+is saved to Drive on every publication and can be opened on any device
+to reconnect it instantly.
+
+\textbf{Field data collection.} Automatic GPS fix with accuracy and
+altitude, reverse geocoding through the Google geocoder with an
+OpenStreetMap Nominatim fallback (OpenStreetMap contributors, 2026),
+time- and location-stamped photographs, audio recording of the
+interview, an offline submission queue with background synchronisation,
+and a form PDF for respondents. \emph{Analyze \& fill} sends the
+photographs, recordings and any typed transcript to a multimodal model
+and maps the answers to the questionnaire, returning English values for
+review together with a verbatim transcript. Three engines are supported:
+Gemini (Gemini Team, 2023) with the user's own key, an open-weight Gemma
+model (Gemma Team, 2025) proxied by the backend so that enumerators need
+no key at all, and Chrome's built-in on-device model (desktop Chrome,
+photographs and text).
+
+\textbf{Team and access model.} Submissions carry a random device
+identifier; a phone can list, re-upload files for and delete only its
+own records. Every administrative action --- publishing or deleting a
+questionnaire, listing all records, exporting the team data set,
+updating the backend --- is checked server-side against an admin token
+stored as an Apps Script property. The token is held only in session
+storage on the admin's device, and one central routine forgets it the
+moment the backend rejects it. The backend updates itself from the
+repository through the Apps Script API on a daily trigger, carrying its
+configuration over, so a deployed survey keeps receiving fixes without
+any manual redeployment.
+
+\textbf{Exports and analysis.} CSV, JSON, KMZ (placemarks with
+attributes for QGIS or Google Earth), SPSS \texttt{.sav} with variable
+labels, value labels and measurement levels (a self-contained writer, no
+dependency), and per-record PDF with photographs and Drive links. The
+analysis engine is a dependency-free Web Worker
+(\texttt{stats-worker.js}) implementing descriptive statistics, Welch's
+\emph{t}-test, one-way ANOVA, \(\chi^2\) tests, ordinary least squares,
+Cronbach's \(\alpha\) (Cronbach, 1951), Kaiser--Meyer--Olkin and
+Bartlett tests (Kaiser, 1974), exploratory factor analysis by principal
+components with varimax rotation, covariance-based confirmatory factor
+analysis and structural models by maximum likelihood with CFI, TLI,
+RMSEA and SRMR (Hu \& Bentler, 1999), composite reliability and average
+variance extracted (Fornell \& Larcker, 1981), PLS-SEM with bootstrap
+confidence intervals, HTMT discriminant validity (Henseler et al.,
+2015), mediation, two-stage moderation and higher-order constructs (Hair
+et al., 2019). Results are rendered as tables, path diagrams and a
+narrative report that can be downloaded.
+
+\section{Design}\label{design}
+
+The client is about 5,000 lines of plain HTML, CSS and JavaScript with
+no framework and no build step, which keeps it auditable by the
+researchers who deploy it and lets it run from any static host. State
+lives in \texttt{localStorage} and IndexedDB; a service worker caches
+the shell for offline use. The backend, \texttt{backend/Code.gs},
+exposes a small JSON API (\texttt{schema}, \texttt{ping},
+\texttt{geocode}, \texttt{list}, submit, \texttt{attach}, \texttt{ai},
+\texttt{selfUpdate} and the admin actions) and keeps a questionnaire
+registry in a \emph{Config} tab. Every served file carries a version
+string and the client, service worker and backend versions are kept
+aligned, so an updated site invalidates stale caches on phones
+automatically.
+
+\section{Quality control}\label{quality-control}
+
+Thirteen browser test suites (\texttt{tests/}, 165 checks) exercise the
+application end to end with Playwright (Microsoft, 2026) against an
+in-memory mock of the Apps Script backend: form rendering and
+validation, the offline queue and synchronisation, admin gating and key
+rejection, multi-questionnaire publication and sheet selection, project
+files, AI design flows with and without an engine, geocoding fallback,
+PDF generation, the QR team link (decoded back with jsQR), and layout
+from 320 px to desktop widths.
+
+\section{Acknowledgements}\label{acknowledgements}
+
+The author thanks the OpenStreetMap contributors whose data provide the
+geocoding fallback, and Google for the free tiers of Apps Script, Drive
+and AI Studio on which the no-cost deployment relies.
+
+\section*{References}\label{references}
+\addcontentsline{toc}{section}{References}
+
+\protect\phantomsection\label{refs}
+\begin{CSLReferences}{1}{0}
+\bibitem[\citeproctext]{ref-aanensen2009}
+{Aanensen, D. M., Huntley, D. M., Feil, E. J., al-Own, F., \& Spratt, B.
+G.} (2009). {EpiCollect}: Linking smartphones to web applications for
+epidemiology, ecology and community data collection. \emph{PLoS ONE},
+\emph{4}(9), e6968. \url{https://doi.org/10.1371/journal.pone.0006968}
+
+\bibitem[\citeproctext]{ref-cronbach1951}
+Cronbach, L. J. (1951). Coefficient alpha and the internal structure of
+tests. \emph{Psychometrika}, \emph{16}(3), 297--334.
+\url{https://doi.org/10.1007/BF02310555}
+
+\bibitem[\citeproctext]{ref-fornell1981}
+Fornell, C., \& Larcker, D. F. (1981). Evaluating structural equation
+models with unobservable variables and measurement error. \emph{Journal
+of Marketing Research}, \emph{18}(1), 39--50.
+\url{https://doi.org/10.1177/002224378101800104}
+
+\bibitem[\citeproctext]{ref-gemini2023}
+Gemini Team. (2023). \emph{Gemini: A family of highly capable multimodal
+models}. arXiv:2312.11805.
+\url{https://doi.org/10.48550/arXiv.2312.11805}
+
+\bibitem[\citeproctext]{ref-gemma3}
+Gemma Team. (2025). \emph{Gemma 3 technical report}. arXiv:2503.19786.
+\url{https://doi.org/10.48550/arXiv.2503.19786}
+
+\bibitem[\citeproctext]{ref-googleforms}
+Google LLC. (2026). \emph{Google {Forms}}.
+\url{https://www.google.com/forms/about/}.
+
+\bibitem[\citeproctext]{ref-hair2019}
+Hair, J. F., Risher, J. J., Sarstedt, M., \& Ringle, C. M. (2019). When
+to use and how to report the results of {PLS-SEM}. \emph{European
+Business Review}, \emph{31}(1), 2--24.
+\url{https://doi.org/10.1108/EBR-11-2018-0203}
+
+\bibitem[\citeproctext]{ref-hartung2010}
+Hartung, C., Lerer, A., Anokwa, Y., Tseng, C., Brunette, W., \&
+Borriello, G. (2010). Open {Data} {Kit}: Tools to build information
+services for developing regions. \emph{Proceedings of the 4th ACM/IEEE
+International Conference on Information and Communication Technologies
+and Development (ICTD '10)}, 18:1--18:12.
+\url{https://doi.org/10.1145/2369220.2369236}
+
+\bibitem[\citeproctext]{ref-henseler2015}
+Henseler, J., Ringle, C. M., \& Sarstedt, M. (2015). A new criterion for
+assessing discriminant validity in variance-based structural equation
+modeling. \emph{Journal of the Academy of Marketing Science},
+\emph{43}(1), 115--135. \url{https://doi.org/10.1007/s11747-014-0403-8}
+
+\bibitem[\citeproctext]{ref-hu1999}
+Hu, L., \& Bentler, P. M. (1999). Cutoff criteria for fit indexes in
+covariance structure analysis: Conventional criteria versus new
+alternatives. \emph{Structural Equation Modeling: A Multidisciplinary
+Journal}, \emph{6}(1), 1--55.
+\url{https://doi.org/10.1080/10705519909540118}
+
+\bibitem[\citeproctext]{ref-kaiser1974}
+Kaiser, H. F. (1974). An index of factorial simplicity.
+\emph{Psychometrika}, \emph{39}(1), 31--36.
+\url{https://doi.org/10.1007/BF02291575}
+
+\bibitem[\citeproctext]{ref-kobotoolbox}
+KoboToolbox. (2026). \emph{{KoboToolbox}: Data collection tools for
+challenging environments}. \url{https://www.kobotoolbox.org/}.
+
+\bibitem[\citeproctext]{ref-playwright}
+Microsoft. (2026). \emph{Playwright: Fast and reliable end-to-end
+testing for modern web apps}. \url{https://playwright.dev/}.
+
+\bibitem[\citeproctext]{ref-osm}
+OpenStreetMap contributors. (2026). \emph{Nominatim: Open-source
+geocoding with {OpenStreetMap} data}. \url{https://nominatim.org/}.
+
+\end{CSLReferences}
+
+\end{document}

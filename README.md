@@ -172,3 +172,25 @@ The admin key is required for **Sync all**, **Edit** (questionnaire), **Data** (
 ## Technical notes
 
 Static site (HTML/JS, no build step) on GitHub Pages. Backend: Google Apps Script bound to a Sheet (rows), Drive for media, a *Config* tab for the published questionnaire. Self-update via the Apps Script API (`selfUpdate_`: fetch `backend/Code.gs` → carry over config constants → `projects.updateContent` → new version → re-point web-app deployments; daily trigger plus app-triggered `action=selfUpdate`). Questionnaires are a registry in the *Config* tab (`questionnaires`, `active_questionnaire`, `schema:<id>`), each with its own response tab; `setSchema` creates (no `qid`) or updates (`qid`, optional `sheetMode: new`), `setActive` / `deleteQuestionnaire` manage them; submissions and `list` route by `qid` / `q`. Records carry a random per-device `device_id`; `list?device=` returns that phone's rows without a token, `list?token=` returns all. Local records are a send queue only, pruned once the row and its Drive files exist. AI: Gemini (`gemini-3.5-flash-lite` default) with strict JSON schemas, Gemma 4 (`gemma-4-26b-a4b-it` / `gemma-4-31b-it`) through the `action=ai` proxy with a server-held key (schema → JSON → free-text fallback), OpenRouter, Chrome built-in. Team link `?db=<endpoint>` (QR from `qr.js`, byte mode, EC level M, versions 1–20) or a `config.js` default. Location: Geolocation API with a refining watch + Nominatim reverse geocoding. Exports: CSV/JSON, native SPSS `.sav` writer, KMZ, jsPDF. Analysis in a Web Worker (`stats-worker.js`): descriptives, t-test/ANOVA/chi-square/regression, Cronbach's α, EFA, CB-SEM, PLS-SEM with bootstrap, mediation, moderation. Project file: `.geosurvey` JSON (`format: geosurvey-project`, endpoint, teamLink, schema); the backend writes it to Drive on `setSchema` / `saveProject`. Files: `index.html`, `styles.css`, `config.js`, `qr.js`, `app.js`, `designer.js`, `analysis.js`, `stats-worker.js`, `exports.js`, `sav.js`, `pdf.js`, `sw.js`, `backend/Code.gs`, `backend/appsscript.json`. Deploy by pushing to `main`.
+
+## Tests
+
+`tests/` holds 13 browser suites (Playwright, Google Chrome, a mocked Apps Script backend) — 165 checks covering the form, offline queue and sync, admin gating, multi-questionnaire publishing, project files, AI design flows, geocoding, PDF and layout from 320 px to desktop.
+
+```bash
+cd tests && npm install && npm test
+```
+
+## Contributing and support
+
+Bug reports, questions and pull requests are welcome on the [issue tracker](https://github.com/pulakeshpradhan/geosurvey/issues); see [CONTRIBUTING.md](CONTRIBUTING.md). Security problems: e-mail geographyspatial@gmail.com rather than opening a public issue.
+
+## Citing GeoSurvey
+
+If GeoSurvey helps your research, please cite it (see [CITATION.cff](CITATION.cff); a paper describing the software is in [paper/](paper/)):
+
+> Pradhan, P. (2026). *GeoSurvey: an installation-free, AI-assisted field survey application with a Google Sheets backend and built-in statistical analysis* (v1.18.3) [Computer software]. https://github.com/pulakeshpradhan/geosurvey
+
+## License
+
+[MIT](LICENSE) © 2026 Pulakesh Pradhan.

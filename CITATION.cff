@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use GeoSurvey in your research, please cite it as below."
+title: "GeoSurvey: an installation-free, AI-assisted field survey application with a Google Sheets backend and built-in statistical analysis"
+type: software
+version: 1.18.3
+date-released: 2026-09-21
+license: MIT
+repository-code: "https://github.com/pulakeshpradhan/geosurvey"
+url: "https://pulakeshpradhan.github.io/geosurvey/"
+authors:
+  - family-names: Pradhan
+    given-names: Pulakesh
+    orcid: "https://orcid.org/0000-0003-3103-3617"
+    affiliation: "Department of Geography, Ravenshaw University, Cuttack, Odisha, India"
+    email: geographyspatial@gmail.com
+    website: "https://pulakeshpradhan.github.io/"
+keywords:
+  - field survey
+  - household survey
+  - data collection
+  - progressive web app
+  - Google Apps Script
+  - geospatial
+  - structural equation modelling
+  - multimodal AI

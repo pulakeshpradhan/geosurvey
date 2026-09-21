@@ -1,0 +1,25 @@
+const { chromium } = require('playwright-core');
+const http = require('http'); const fs = require('fs'); const path = require('path');
+const ROOT = path.join(__dirname, '..'); const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
+const srv = http.createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0]); if (p.endsWith('/')) p += 'index.html'; const f = path.join(ROOT, p); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream' }); res.end(fs.readFileSync(f)); }).listen(8776);
+const t = (n, ok, extra = '') => console.log((ok ? 'PASS' : 'FAIL') + ' ' + n + (extra ? ' — ' + extra : ''));
+(async () => {
+  const b = await chromium.launch({ ...(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chrome' }) });
+  const ctx = await b.newContext({ viewport: { width: 360, height: 640 } }); const page = await ctx.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.route(u => /nominatim|script\.google\.com/.test(u.hostname), r => r.abort());
+  await page.goto('http://localhost:8776/'); await page.waitForTimeout(1200);
+  t('popup open', await page.$eval('#welcomeDlg', d => d.open));
+  const box = await page.$eval('#welcomeDlg', d => { const r = d.getBoundingClientRect(); return { h: r.height, w: r.width, scroll: d.scrollHeight > d.clientHeight + 1 }; });
+  t('fits a 360×640 phone without scrolling', box.h <= 640 && !box.scroll, JSON.stringify(box));
+  t('credit link present', (await page.$eval('.credit', a => a.href)) === 'https://pulakeshpradhan.github.io/');
+  t('24 icons rendered', (await page.$$eval('.cmp .ic use', u => u.length)) === 24);
+  await page.screenshot({ path: 'out/welcome-compact.png' });
+  await page.click('#welcomeClose'); await page.waitForTimeout(300);
+  t('closes with animation', !(await page.$eval('#welcomeDlg', d => d.open)) && !(await page.$eval('#welcomeDlg', d => d.classList.contains('closing'))));
+  await page.click('#obSample').catch(() => {}); await page.waitForTimeout(400);
+  const ro = await page.evaluate(() => ({ lat: document.querySelector('[data-key="latitude"]').readOnly, date: document.querySelector('[data-key="survey_date"]').readOnly, village: document.querySelector('[data-key="village"]').readOnly, block: document.querySelector('[data-key="block"]').readOnly, addr: document.querySelector('[data-key="full_address"]').readOnly }));
+  t('GPS + date locked, address editable', ro.lat && ro.date && !ro.village && !ro.block && !ro.addr, JSON.stringify(ro));
+  await page.fill('[data-key="village"]', 'Corrected Village'); t('village accepts typing', (await page.inputValue('[data-key="village"]')) === 'Corrected Village');
+  t('no page errors', !errors.length, errors.join(','));
+  await b.close(); srv.close();
+})().catch(e => { console.error(e); process.exit(1); });

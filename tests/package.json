@@ -1,0 +1,12 @@
+{
+  "name": "geosurvey-tests",
+  "private": true,
+  "description": "Browser regression suites for GeoSurvey (Playwright + a mocked Apps Script backend)",
+  "scripts": {
+    "test": "node run-all.js"
+  },
+  "dependencies": {
+    "jsqr": "^1.4.0",
+    "playwright-core": "^1.63.0"
+  }
+}

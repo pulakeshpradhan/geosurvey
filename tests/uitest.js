@@ -1,0 +1,62 @@
+const { chromium } = require('playwright-core');
+const http = require('http'); const fs = require('fs'); const path = require('path');
+const ROOT = path.join(__dirname, '..');
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
+const srv = http.createServer((req, res) => {
+  let p = decodeURIComponent(req.url.split('?')[0]); if (p.endsWith('/')) p += 'index.html';
+  const f = path.join(ROOT, p); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream' }); res.end(fs.readFileSync(f));
+}).listen(8765);
+(async () => {
+  const b = await chromium.launch({ ...(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chrome' }) }); const ctx = await b.newContext({ viewport: { width: 420, height: 860 }, permissions: [] });
+  const page = await ctx.newPage(); const errors = [];
+  page.on('pageerror', e => errors.push('pageerror: ' + e.message)); page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  page.on('dialog', d => d.type() === 'prompt' ? d.accept('GeoSurvey') : d.accept());
+  await page.route(u => /nominatim|generativelanguage/.test(u.hostname), r => r.abort());
+  await page.route(u => u.hostname === 'script.google.com', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, rows: [], total: 0, schema: null, ai: false, version: '1.15.9' }) }));
+  const DB = 'https://script.google.com/macros/s/AKfycbTESTabc_123/exec';
+  await page.addInitScript(() => { try { localStorage.setItem('gs_welcomed', '"x"'); } catch {} }); await page.goto(`http://localhost:8765/?db=${encodeURIComponent(DB)}`); await page.waitForTimeout(800);
+  const t = (n, ok, extra = '') => console.log((ok ? 'PASS' : 'FAIL') + ' ' + n + (extra ? ' — ' + extra : ''));
+  t('URL param stripped', page.url() === 'http://localhost:8765/', page.url());
+  const s1 = await page.evaluate(() => JSON.parse(localStorage.getItem('gs_settings')));
+  t('endpoint adopted from ?db= link', s1.endpoint === DB && s1.endpointSource === 'link', JSON.stringify({ e: s1.endpoint, src: s1.endpointSource }));
+  await page.click('#obSample').catch(() => {}); await page.waitForTimeout(300);
+  // pen button
+  t('pen button present', await page.$('#writeBtn') !== null);
+  t('transcript box hidden initially', await page.$eval('#transcriptWrap', e => e.hidden));
+  await page.click('#writeBtn'); await page.waitForTimeout(200);
+  t('pen opens transcript box', !(await page.$eval('#transcriptWrap', e => e.hidden)));
+  t('transcript focused', await page.evaluate(() => document.activeElement && document.activeElement.id === 'transcript'));
+  await page.click('#writeBtn'); await page.waitForTimeout(200);
+  t('pen again (empty) closes box', await page.$eval('#transcriptWrap', e => e.hidden));
+  await page.click('#writeBtn'); await page.fill('#transcript', 'household has 4 members'); await page.waitForTimeout(200);
+  t('Analyze enabled with typed notes', !(await page.$eval('#analyzeBtn', e => e.disabled)));
+  await page.click('#writeBtn'); await page.waitForTimeout(200);
+  t('pen with text keeps box open', !(await page.$eval('#transcriptWrap', e => e.hidden)));
+  // settings dialog: paste + Enter must not close it
+  await page.click('#settingsBtn'); await page.waitForTimeout(200);
+  t('dialog open', await page.$eval('#settingsDlg', d => d.open));
+  t('endpoint prefilled from link', (await page.inputValue('#setEndpoint')) === DB);
+  t('hint shows link source', !(await page.$eval('#endpointHint', e => e.hidden)) && /team link/i.test(await page.textContent('#endpointHint')));
+  t('team link button visible', !(await page.$eval('#teamLinkBtn', e => e.hidden)));
+  await page.fill('#setKey', 'AIzaFAKEKEY'); await page.press('#setKey', 'Enter'); await page.waitForTimeout(400);
+  t('Enter in key field keeps dialog open', await page.$eval('#settingsDlg', d => d.open));
+  t('Enter in key field ran Test connection', /Testing|Failed/.test(await page.textContent('#testAiStatus')), await page.textContent('#testAiStatus'));
+  await page.press('#setSurveyor', 'Enter'); await page.waitForTimeout(200);
+  t('Enter in name field keeps dialog open', await page.$eval('#settingsDlg', d => d.open));
+  await page.fill('#setSurveyor', 'Asha'); await page.click('#saveSettingsBtn'); await page.waitForTimeout(300);
+  const s2 = await page.evaluate(() => JSON.parse(localStorage.getItem('gs_settings')));
+  t('Save persists and keeps link endpoint', s2.surveyor === 'Asha' && s2.endpoint === DB && s2.endpointSource === 'link' && s2.geminiKey === 'AIzaFAKEKEY', JSON.stringify({ s: s2.surveyor, src: s2.endpointSource }));
+  await page.click('#settingsBtn'); await page.fill('#setSurveyor', 'ZZZ'); await page.click('#cancelSettingsBtn'); await page.waitForTimeout(200);
+  const s3 = await page.evaluate(() => JSON.parse(localStorage.getItem('gs_settings')));
+  t('Cancel discards edits', s3.surveyor === 'Asha');
+  await page.click('#settingsBtn'); await page.fill('#setSurveyor', 'ZZZ'); await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  const s4 = await page.evaluate(() => JSON.parse(localStorage.getItem('gs_settings')));
+  t('Escape after a previous Save does not re-save', s4.surveyor === 'Asha', s4.surveyor);
+  await page.click('#settingsBtn'); await page.fill('#setEndpoint', ''); await page.click('#saveSettingsBtn'); await page.waitForTimeout(200);
+  const s5 = await page.evaluate(() => JSON.parse(localStorage.getItem('gs_settings')));
+  t('clearing endpoint (no team default) stores empty', s5.endpoint === '' && s5.endpointSource === '');
+  await page.screenshot({ path: 'out/photo-card.png', clip: { x: 0, y: 0, width: 420, height: 330 } });
+  console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
+  await b.close(); srv.close();
+})().catch(e => { console.error(e); process.exit(1); });

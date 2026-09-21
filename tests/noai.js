@@ -1,0 +1,22 @@
+const { chromium } = require('playwright-core');
+const http = require('http'); const fs = require('fs'); const path = require('path');
+const ROOT = path.join(__dirname, '..'); const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
+const srv = http.createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0]); if (p.endsWith('/')) p += 'index.html'; const f = path.join(ROOT, p); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream' }); res.end(fs.readFileSync(f)); }).listen(8784);
+const t = (n, ok, extra = '') => console.log((ok ? 'PASS' : 'FAIL') + ' ' + n + (extra ? ' — ' + extra : ''));
+(async () => {
+  const b = await chromium.launch({ ...(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chrome' }) });
+  const page = await b.newPage({ viewport: { width: 1000, height: 800 } }); const errors = []; page.on('pageerror', e => errors.push(e.message));
+  page.on('dialog', d => d.type() === 'prompt' ? d.accept('GeoSurvey') : d.accept());
+  await page.route(u => /nominatim|generativelanguage/.test(u.hostname), r => r.abort());
+  await page.route(u => u.hostname === 'script.google.com', r => { const a = new URL(r.request().url()).searchParams.get('action'); r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(a === 'schema' ? { ok: true, schema: null, active: '', questionnaires: [], ai: false, version: '1.17.2' } : { ok: true, rows: [], total: 0, sheetUrl: 'x', version: '1.17.2' }) }); });
+  await page.addInitScript(() => { try { localStorage.setItem('gs_welcomed', '"x"'); } catch {} });
+  await page.goto('http://localhost:8784/?db=' + encodeURIComponent('https://script.google.com/macros/s/AKfycbNOAI/exec')); await page.waitForTimeout(700);
+  await page.click('#obAi'); await page.waitForTimeout(600);
+  const s = await page.evaluate(() => ({ open: document.getElementById('aiDesignDlg').open, notice: !document.getElementById('aiDesignNoAi').hidden, run: document.getElementById('aiDesignRun').disabled, settings: document.getElementById('settingsDlg').open, ready: engineReady() }));
+  t('no AI: dialog opens (Settings does NOT pop up)', s.open && !s.settings, JSON.stringify(s));
+  t('no AI: notice shown, Generate disabled', s.notice && s.run && !s.ready, JSON.stringify(s));
+  await page.click('#aiDesignSetup'); await page.waitForTimeout(500);
+  t('"Set up AI" button opens Settings', await page.$eval('#settingsDlg', d => d.open) && !(await page.$eval('#aiDesignDlg', d => d.open)));
+  t('no page errors', !errors.length, errors.join(','));
+  await b.close(); srv.close();
+})().catch(e => { console.error(e); process.exit(1); });
